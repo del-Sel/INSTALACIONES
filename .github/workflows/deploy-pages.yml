@@ -1,0 +1,59 @@
+name: Deploy FUL-MAR wiki
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: fulmar-pages-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate application configuration
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_EDITOR_EMAIL: ${{ secrets.VITE_EDITOR_EMAIL }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || { echo "::error::Falta el secreto VITE_SUPABASE_URL"; exit 1; }
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || { echo "::error::Falta el secreto VITE_SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          test -n "$VITE_EDITOR_EMAIL" || { echo "::error::Falta el secreto VITE_EDITOR_EMAIL"; exit 1; }
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_EDITOR_EMAIL: ${{ secrets.VITE_EDITOR_EMAIL }}
+          VITE_R2_PUBLIC_BASE_URL: ${{ secrets.VITE_R2_PUBLIC_BASE_URL }}
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=fulmar-instalaciones
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
