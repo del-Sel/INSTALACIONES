@@ -4,6 +4,7 @@ import VehiclePlaceholder from '../components/VehiclePlaceholder.jsx'
 import AppIcon from '../components/AppIcon.jsx'
 import fulmarLogo from '../assets/fulmar-logo.jpg'
 import { getCatalogSnapshot, loadCatalogSnapshot } from '../lib/catalogCache.js'
+import { contentKindLabel, statusLabel, formatUpdatedDate, countLabel } from '../lib/uiText.js'
 
 function Home() {
   const initial = getCatalogSnapshot()
@@ -48,6 +49,25 @@ function Home() {
   }, [families, guides, collections])
 
   const visibleBrands = brands.filter(brand => (brandMeta[brand.id]?.count || 0) > 0)
+
+  const documentItems = useMemo(() => {
+    const familyById = new Map(families.map(family => [family.id, family]))
+    const brandById = new Map(brands.map(brand => [brand.id, brand]))
+    const collectionById = new Map(collections.map(collection => [collection.id, collection]))
+
+    return guides
+      .map(guide => {
+        const family = familyById.get(guide.family_id)
+        const brand = family ? brandById.get(family.brand_id) : null
+        return { guide, family, brand, collection: collectionById.get(guide.library_collection_id) }
+      })
+      .filter(item => item.family && item.brand)
+      .sort((a, b) => `${a.brand.name} ${a.family.name} ${a.guide.title}`.localeCompare(`${b.brand.name} ${b.family.name} ${b.guide.title}`))
+  }, [brands, families, guides, collections])
+
+  const materialItems = useMemo(() => (
+    [...collections].sort((a, b) => `${a.source_brand} ${a.title}`.localeCompare(`${b.source_brand} ${b.title}`))
+  ), [collections])
 
   function buscar(event) {
     event.preventDefault()
@@ -126,6 +146,78 @@ function Home() {
           </div>
         )}
       </section>
+
+      {documentItems.length > 0 && (
+        <section className="home-section-v6" aria-labelledby="home-documents-title">
+          <div className="section-heading-v6">
+            <div>
+              <span className="section-label-v6">Documentación</span>
+              <h2 id="home-documents-title">Documentos técnicos</h2>
+              <p>Consulte instructivos, instalaciones parciales y referencias técnicas desde esta misma pantalla.</p>
+            </div>
+            <span className="home-section-count-v13">{countLabel(documentItems.length, 'documento', 'documentos')}</span>
+          </div>
+
+          <div className="home-document-grid-v13">
+            {documentItems.map(({ guide, family, brand, collection }) => {
+              const cover = guide.cover_url || collection?.cover_url
+              const kind = guide.content_kind || 'INSTRUCTIVO'
+              return (
+                <Link key={guide.id} to={`/${brand.slug}/${family.slug}#guide-${guide.id}`} className="home-document-card-v13">
+                  <div className="home-document-cover-v13">
+                    {cover ? <img src={cover} alt={`Vehículo ${brand.name} · ${family.name}`} loading="lazy" decoding="async" /> : <VehiclePlaceholder compact />}
+                  </div>
+                  <div className="home-document-copy-v13">
+                    <span className="home-document-path-v13">{brand.name} · {family.name}</span>
+                    <h3>{guide.title}</h3>
+                    <p>{guide.summary || guide.equipment || contentKindLabel(kind)}</p>
+                    <div className="home-document-meta-v13">
+                      <span className={`content-kind-mini-v8 ${String(kind).toLowerCase()}`}>{contentKindLabel(kind)}</span>
+                      <span className={`guide-status ${guide.status === 'VALIDADA' ? 'valid' : 'draft'}`}>{statusLabel(guide.status)}</span>
+                    </div>
+                    <small>{formatUpdatedDate(guide.updated_at)}</small>
+                  </div>
+                  <AppIcon name="arrow" size={19} />
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {materialItems.length > 0 && (
+        <section className="home-section-v6" aria-labelledby="home-material-title">
+          <div className="section-heading-v6">
+            <div>
+              <span className="section-label-v6">Material asociado</span>
+              <h2 id="home-material-title">Material técnico</h2>
+              <p>Imágenes, videos, documentación y datos técnicos disponibles desde Inicio.</p>
+            </div>
+            <span className="home-section-count-v13">{countLabel(materialItems.length, 'documento', 'documentos')}</span>
+          </div>
+
+          <div className="home-material-grid-v13">
+            {materialItems.map(item => (
+              <Link key={item.id} to={`/biblioteca/${item.id}`} className="home-material-card-v13">
+                <div className="home-material-cover-v13">
+                  {item.cover_url ? <img src={item.cover_url} alt={item.title} loading="lazy" decoding="async" /> : <VehiclePlaceholder compact />}
+                  <span>{item.source_brand || 'FUL-MAR'}</span>
+                </div>
+                <div className="home-material-copy-v13">
+                  <h3>{item.title}</h3>
+                  <div className="home-material-badges-v13">
+                    <span>{countLabel(item.file_count || 0, 'archivo', 'archivos')}</span>
+                    <span>{countLabel(item.image_count || 0, 'imagen', 'imágenes')}</span>
+                    <span>{countLabel(item.video_count || 0, 'video', 'videos')}</span>
+                    <span>{countLabel(item.can_data_count || 0, 'dato CAN', 'datos CAN')}</span>
+                  </div>
+                  <div className="home-material-footer-v13">Abrir material <AppIcon name="arrow" size={17} /></div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </>
   )
 }
