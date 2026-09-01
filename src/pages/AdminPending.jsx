@@ -37,11 +37,11 @@ function AdminPending() {
   return (
     <>
       <header className="admin-hero-v7 compact">
-        <div><div className="page-eyebrow">ADMINISTRACIÓN</div><h1>Instructivos por revisar</h1><p>Instructivos y documentos parciales pendientes de revisión. Las referencias técnicas no se mezclan acá.</p></div>
+        <div><div className="page-eyebrow">ADMINISTRACIÓN</div><h1>Instructivos por revisar</h1><p>Instructivos y documentos parciales pendientes de revisión. Las referencias técnicas se administran por separado.</p></div>
         <div className="admin-stats-v7 single"><div><strong>{items.length}</strong><span>Por revisar</span></div></div>
       </header>
 
-      <section className="admin-toolbar-v7"><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar instalación..." /></section>
+      <section className="admin-toolbar-v7"><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar documentación..." /></section>
 
       <div className="admin-pending-list-v7">
         {filtered.map(item => (

@@ -66,7 +66,7 @@ function AdminGuides() {
     const brand = family ? brandById.get(family.brand_id) : null
 
     if (!brand || !family || !form.title.trim()) {
-      setMessage('Elegí marca, familia y escribí el título.')
+      setMessage('Seleccione una marca y una familia, e ingrese el título.')
       return
     }
 
@@ -109,7 +109,7 @@ function AdminGuides() {
         <div>
           <div className="page-eyebrow">ADMINISTRACIÓN</div>
           <h1>Administración de instalaciones</h1>
-          <p>Gestioná instructivos, instalaciones parciales, referencias técnicas y material vinculado desde un único panel.</p>
+          <p>Gestione instructivos, instalaciones parciales, referencias técnicas y material vinculado desde un único panel.</p>
         </div>
         <div className="admin-stats-v7">
           <div><strong>{instructivos}</strong><span>Instructivos</span></div>
@@ -121,7 +121,7 @@ function AdminGuides() {
 
       <div className="admin-quick-v7">
         <Link to="/admin/material"><strong>Material sin vincular</strong><span>Revisar colecciones técnicas que todavía no están asociadas a una instalación.</span><b>→</b></Link>
-        <Link to="/admin/pendientes"><strong>Pendientes de revisión</strong><span>Revisar instructivos e instalaciones parciales pendientes de validación.</span><b>→</b></Link>
+        <Link to="/admin/pendientes"><strong>Pendientes de revisión</strong><span>Revise instructivos e instalaciones parciales pendientes de validación.</span><b>→</b></Link>
       </div>
 
       <section className="admin-toolbar-v7">

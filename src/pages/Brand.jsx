@@ -6,6 +6,7 @@ import { useEdit } from '../context/EditContext.jsx'
 import { supabase } from '../supabase.js'
 import { getCatalogSnapshot, invalidateCatalogCache, loadCatalogSnapshot } from '../lib/catalogCache.js'
 import { slugify } from '../lib/text.js'
+import { countLabel } from '../lib/uiText.js'
 
 function buildView(snapshot, brandSlug) {
   if (!snapshot) return null
@@ -84,6 +85,8 @@ function Brand() {
   const visibleFamilies = editing ? families : families.filter(family => ((meta[family.id]?.count || 0) + (meta[family.id]?.references || 0)) > 0)
   const totalGuides = visibleFamilies.reduce((sum, family) => sum + (meta[family.id]?.count || 0), 0)
   const totalValidated = visibleFamilies.reduce((sum, family) => sum + (meta[family.id]?.validated || 0), 0)
+  const totalReferences = visibleFamilies.reduce((sum, family) => sum + (meta[family.id]?.references || 0), 0)
+  const totalDocuments = totalGuides + totalReferences
   const heroCover = useMemo(() => {
     for (const family of visibleFamilies) {
       const cover = meta[family.id]?.covers?.[0]
@@ -128,7 +131,7 @@ function Brand() {
     if (result.error) return setMessage(result.error.message)
     invalidateCatalogCache()
     setNewFamilyName('')
-    setMessage('✓ Modelo creado. Ya podés crear subcarpetas dentro.')
+    setMessage('✓ Modelo creado. Ya puede crear subcarpetas dentro.')
     navigate(`/${brand.slug}/${result.data.slug}`)
   }
 
@@ -137,11 +140,11 @@ function Brand() {
 
   return (
     <>
-      <Link to="/biblioteca" className="back-link-v6">← Instalaciones</Link>
+      <Link to="/biblioteca" className="back-link-v6">← Biblioteca técnica</Link>
 
       <header className="brand-hero-v6">
         <div className="brand-hero-image-v6">
-          {heroCover ? <img src={heroCover} alt={`Vehículo ${brand?.name}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label={`Sin foto general de ${brand?.name}`} />}
+          {heroCover ? <img src={heroCover} alt={`Vehículo ${brand?.name}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label={`Imagen no disponible para ${brand?.name}`} />}
         </div>
         <div className="brand-hero-content-v6">
           <div className="page-eyebrow">MARCA</div>
@@ -153,11 +156,12 @@ function Brand() {
               ? <div className="structure-inline-actions-v127"><button type="button" onClick={saveBrandName}>Guardar</button><button type="button" onClick={() => { setBrandEditing(false); setBrandName(brand?.name || '') }}>Cancelar</button></div>
               : <button type="button" className="structure-pencil-v127" onClick={() => { setBrandName(brand?.name || ''); setBrandEditing(true) }} title="Editar nombre de la marca"><AppIcon name="edit" size={16} /></button>)}
           </div>
-          <p>Seleccioná un modelo para acceder a sus subcarpetas, instalaciones y material técnico.</p>
+          <p>Seleccione un modelo para consultar sus subcarpetas, instalaciones y material técnico.</p>
           <div className="brand-stats-row-v6">
             <div><strong>{visibleFamilies.length}</strong><span>Modelos</span></div>
-            <div><strong>{totalGuides}</strong><span>Instalaciones</span></div>
+            <div><strong>{totalDocuments}</strong><span>Documentos</span></div>
             <div><strong>{totalValidated}</strong><span>Validadas</span></div>
+            <div><strong>{totalReferences}</strong><span>Referencias</span></div>
           </div>
           {editing && message && <div className="structure-message-v127">{message}</div>}
         </div>
@@ -167,12 +171,12 @@ function Brand() {
         <div className="section-heading-v6 structure-heading-v127">
           <div>
             <span className="section-label-v6">MODELOS</span>
-            <h2>Vehículos disponibles</h2>
-            <p>Entrá a un modelo para ver y administrar sus subcarpetas.</p>
+            <h2>Modelos disponibles</h2>
+            <p>Seleccione un modelo para consultar o administrar sus subcarpetas.</p>
           </div>
           {editing && (
             <form className="create-structure-inline-v127" onSubmit={createFamily}>
-              <input value={newFamilyName} onChange={event => setNewFamilyName(event.target.value)} placeholder="Nombre del nuevo modelo" />
+              <input value={newFamilyName} onChange={event => setNewFamilyName(event.target.value)} placeholder="Nombre del nuevo modelo" aria-label="Nombre del nuevo modelo" />
               <button type="submit" disabled={creatingFamily || !newFamilyName.trim()}>+ {creatingFamily ? 'Creando…' : 'Crear modelo'}</button>
             </form>
           )}
@@ -187,13 +191,13 @@ function Brand() {
               <article key={family.id} className="family-card-shell-v127">
                 <Link to={`/${brand.slug}/${family.slug}`} className="family-card-v6">
                   <div className="family-card-cover-v6">
-                    {cover ? <img src={cover} alt={`${brand?.name} ${family.name}`} loading={index < 3 ? 'eager' : 'lazy'} decoding="async" /> : <VehiclePlaceholder label={`Sin foto de ${family.name}`} />}
+                    {cover ? <img src={cover} alt={`${brand?.name} ${family.name}`} loading={index < 3 ? 'eager' : 'lazy'} decoding="async" /> : <VehiclePlaceholder label={`Imagen no disponible para ${family.name}`} />}
                   </div>
                   <div className="family-card-copy-v6">
                     <span>{brand?.name}</span>
                     <h2>{family.name}</h2>
-                    <p>{current.count} instalación{current.count === 1 ? '' : 'es'} · {current.references} referencia{current.references === 1 ? '' : 's'}</p>
-                    <div className="family-card-action-v6">Abrir modelo <AppIcon name="arrow" size={17} /></div>
+                    <p>{countLabel(current.count, 'instalación', 'instalaciones')} · {countLabel(current.references, 'referencia', 'referencias')}</p>
+                    <div className="family-card-action-v6">Consultar modelo <AppIcon name="arrow" size={17} /></div>
                   </div>
                 </Link>
                 {editing && !editingThis && <button type="button" className="family-card-edit-v127" onClick={() => { setFamilyEditingId(family.id); setFamilyName(family.name) }} title="Editar nombre del modelo"><AppIcon name="edit" size={15} /></button>}
@@ -210,7 +214,7 @@ function Brand() {
         </div>
       </section>
 
-      {visibleFamilies.length === 0 && <div className="page-card">{editing ? 'Todavía no hay modelos. Creá el primero desde arriba.' : 'No hay instalaciones registradas para esta marca.'}</div>}
+      {visibleFamilies.length === 0 && <div className="page-card">{editing ? 'Todavía no hay modelos. Cree el primero desde el formulario superior.' : 'No hay documentación registrada para esta marca.'}</div>}
     </>
   )
 }

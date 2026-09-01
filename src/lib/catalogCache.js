@@ -1,6 +1,6 @@
 import { supabase } from '../supabase.js'
 
-const CACHE_KEY = 'fulmar.catalog.v1272'
+const CACHE_KEY = 'fulmar.catalog.v1300'
 const CACHE_TTL = 5 * 60 * 1000
 let memory = null
 let pending = null

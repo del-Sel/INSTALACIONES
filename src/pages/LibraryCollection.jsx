@@ -85,7 +85,7 @@ function LibraryCollection() {
 
   return (
     <>
-      <Link to="/biblioteca" className="back-link">← Instalaciones</Link>
+      <Link to="/biblioteca" className="back-link">← Biblioteca técnica</Link>
 
       <header className="library-detail-header">
         <div>

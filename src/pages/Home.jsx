@@ -25,6 +25,7 @@ function Home() {
   const families = snapshot?.families || []
   const guides = snapshot?.guides || []
   const collections = snapshot?.collections || []
+  const validatedGuides = guides.filter(guide => guide.status === 'VALIDADA').length
 
   const brandMeta = useMemo(() => {
     const familyById = new Map(families.map(family => [family.id, family]))
@@ -60,24 +61,32 @@ function Home() {
         <div className="home-hero-copy-v6">
           <img src={fulmarLogo} alt="FUL-MAR" className="home-hero-logo-v6" fetchPriority="high" decoding="async" />
           <div className="page-eyebrow">BASE TÉCNICA INTERNA</div>
-          <h1>Instalaciones por vehículo</h1>
-          <p>Consulta de instructivos, instalaciones parciales y documentación técnica organizada por marca y vehículo.</p>
-
+          <h1>Documentación técnica por vehículo</h1>
+          <p>Consulte instructivos, instalaciones parciales y referencias técnicas organizadas por marca, modelo y sistema.</p>
         </div>
 
-        <div className="home-search-panel-v1271">
-          <form className="home-search-v6" onSubmit={buscar} role="search">
-            <AppIcon name="search" size={21} />
-            <label htmlFor="home-search" className="sr-only">Buscar instalación</label>
-            <input
-              id="home-search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Buscar Daily, Sprinter, Actros, FMS..."
-              autoComplete="off"
-            />
-            <button type="submit">Buscar</button>
-          </form>
+        <div className="home-hero-side-v13">
+          <div className="home-search-panel-v1271">
+            <form className="home-search-v6" onSubmit={buscar} role="search">
+              <AppIcon name="search" size={21} />
+              <label htmlFor="home-search" className="sr-only">Buscar en la documentación técnica</label>
+              <input
+                id="home-search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Buscar por marca, modelo o sistema..."
+                autoComplete="off"
+              />
+              <button type="submit">Buscar</button>
+            </form>
+          </div>
+
+          <div className="home-summary-v6" aria-label="Resumen de la biblioteca técnica">
+            <div><strong>{brands.length}</strong><span>Marcas</span></div>
+            <div><strong>{families.length}</strong><span>Modelos</span></div>
+            <div><strong>{guides.length}</strong><span>Documentos</span></div>
+            <div><strong>{validatedGuides}</strong><span>Validados</span></div>
+          </div>
         </div>
       </section>
 
@@ -85,10 +94,10 @@ function Home() {
         <div className="section-heading-v6">
           <div>
             <span className="section-label-v6">Acceso rápido</span>
-            <h2>Marcas</h2>
-            <p>Seleccioná una marca para consultar sus familias, instructivos y referencias técnicas.</p>
+            <h2>Marcas disponibles</h2>
+            <p>Seleccione una marca para consultar sus modelos, instructivos y referencias técnicas.</p>
           </div>
-          <Link to="/biblioteca" className="text-link-v6">Ver todas <AppIcon name="arrow" size={16} /></Link>
+          <Link to="/biblioteca" className="text-link-v6">Ver biblioteca completa <AppIcon name="arrow" size={16} /></Link>
         </div>
 
         {loading && !snapshot ? (
@@ -102,15 +111,15 @@ function Home() {
               return (
                 <Link key={brand.id} to={`/${brand.slug}`} className="home-brand-card-v6">
                   <div className="home-brand-cover-v6">
-                    {cover ? <img src={cover} alt={`Vehículo ${brand.name}`} loading={index < 4 ? 'eager' : 'lazy'} fetchPriority={index < 2 ? 'high' : 'auto'} decoding="async" /> : <VehiclePlaceholder label={`Sin foto de ${brand.name}`} />}
+                    {cover ? <img src={cover} alt={`Vehículo ${brand.name}`} loading={index < 4 ? 'eager' : 'lazy'} fetchPriority={index < 2 ? 'high' : 'auto'} decoding="async" /> : <VehiclePlaceholder label={`Imagen no disponible para ${brand.name}`} />}
                   </div>
                   <div className="home-brand-copy-v6">
                     <div>
                       <span>Marca</span>
                       <h3>{brand.name}</h3>
                     </div>
-                    <p>{meta.count} instalación{meta.count === 1 ? '' : 'es'} · {meta.families.size} familia{meta.families.size === 1 ? '' : 's'}</p>
-                    <div className="home-brand-card-footer-v6"><span>{meta.validated} validadas</span><AppIcon name="arrow" size={18} /></div>
+                    <p>{meta.count} {meta.count === 1 ? 'instalación' : 'instalaciones'} · {meta.families.size} {meta.families.size === 1 ? 'familia' : 'familias'}</p>
+                    <div className="home-brand-card-footer-v6"><span>{meta.validated} {meta.validated === 1 ? 'documento validado' : 'documentos validados'}</span><AppIcon name="arrow" size={18} /></div>
                   </div>
                 </Link>
               )
