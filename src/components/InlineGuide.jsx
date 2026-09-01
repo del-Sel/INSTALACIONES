@@ -618,10 +618,10 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
         }
       }))
       setAutoSaveBlocked(false)
-      setMessage(mode === 'auto' ? '✓ Cambios guardados automáticamente' : '✓ Guardado · podés seguir editando sin perder tu lugar')
+      setMessage(mode === 'auto' ? '✓ Cambios guardados automáticamente' : '✓ Guardado · puede continuar editando sin perder su ubicación')
     } catch (saveError) {
       if (mode === 'auto') setAutoSaveBlocked(true)
-      setMessage((saveError.message || 'No se pudieron guardar los cambios') + (mode === 'auto' ? ' · podés reintentar con Guardar cambios' : ''))
+      setMessage((saveError.message || 'No se pudieron guardar los cambios') + (mode === 'auto' ? ' · puede reintentar con Guardar cambios' : ''))
     } finally {
       setSaving(false)
     }
@@ -1409,7 +1409,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
             <div className="link-existing-asset-v8 link-existing-asset-v123" id={`asset-picker-trigger-${section.id}`}>
               <div>
                 <strong>Agregar material ya importado</strong>
-                <small>Previsualizá las imágenes y seleccioná el material correspondiente.</small>
+                <small>Previsualice las imágenes y seleccione el material correspondiente.</small>
               </div>
               <button type="button" className="asset-picker-open-v123" onClick={() => openAssetPicker(section)}>
                 <AppIcon name="photo" size={18} /> Ver fotos y archivos
@@ -1503,7 +1503,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
         </div>
 
         <div className="document-cover-image-v7">
-          {cover ? <img src={cover} alt={`Vehículo ${guide?.title || family?.name || 'FUL-MAR'}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label="Sin foto del vehículo" />}
+          {cover ? <img src={cover} alt={`Vehículo ${guide?.title || family?.name || 'FUL-MAR'}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label="Imagen no disponible" />}
           {editing && (
             <button type="button" className="change-cover-v7" onClick={() => setCoverPicker(true)}>
               <AppIcon name="photo" size={17} /> Cambiar portada
@@ -1593,7 +1593,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
                   <div className="general-library-editor-v127">
                     <div>
                       <strong>Biblioteca general de esta subcarpeta</strong>
-                      <span>Subí fotos, PDF, Word, Excel, videos o archivos técnicos. Después podés seleccionarlos desde cualquier fase con “Ver fotos y archivos”.</span>
+                      <span>Cargue fotos, PDF, Word, Excel, videos o archivos técnicos. Después podrá seleccionarlos desde cualquier fase con “Ver fotos y archivos”.</span>
                     </div>
                     <label className="general-library-upload-v127">
                       <AppIcon name="upload" size={18} /> Subir archivos
@@ -1683,7 +1683,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
       {editing && (
         <div className={`inline-save-bar-v4 document-save-v7 save-bar-v121 ${hasUnsavedChanges ? 'dirty' : 'saved'}`}>
-          <span>{message || (hasUnsavedChanges ? 'Guardado automático en un instante · Ctrl + S también guarda.' : '✓ Todo guardado. Podés seguir editando.')}</span>
+          <span>{message || (hasUnsavedChanges ? 'Guardado automático en un instante · Ctrl + S también guarda.' : '✓ Todo guardado. Puede continuar editando.')}</span>
           <button type="button" className="primary-button" onClick={() => saveAll('manual')} disabled={saving || !hasUnsavedChanges}>
             {saving ? 'Guardando…' : hasUnsavedChanges ? 'Guardar cambios' : 'Guardado'}
           </button>
@@ -1765,7 +1765,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
             )}
 
             <div className="asset-picker-footer-v123" aria-live="polite">
-              <span>{message || 'Seleccioná uno o varios elementos y luego volvé al instructivo.'}</span>
+              <span>{message || 'Seleccione uno o varios elementos y luego regrese al instructivo.'}</span>
               <button type="button" onClick={closeAssetPicker}>Listo, volver al instructivo</button>
             </div>
           </div>
@@ -1776,7 +1776,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
         <div className="cover-picker-backdrop-v7" onClick={() => setCoverPicker(false)}>
           <div className="cover-picker-v7" onClick={event => event.stopPropagation()}>
             <div className="cover-picker-head-v7">
-              <div><strong>Portada de la instalación</strong><span>Seleccioná una imagen representativa del vehículo o cargá una nueva.</span></div>
+              <div><strong>Portada de la instalación</strong><span>Seleccione una imagen representativa del vehículo o cargue una nueva.</span></div>
               <button type="button" onClick={() => setCoverPicker(false)}><AppIcon name="close" size={20} /></button>
             </div>
 

@@ -36,7 +36,7 @@ function BrandLibraryStrip({ brandName }) {
           <h2>Material técnico</h2>
           <p>Material de referencia asociado a {brandName}.</p>
         </div>
-        <Link to="/biblioteca" className="brand-library-all">Ver instalaciones →</Link>
+        <span className="brand-library-all">Material asociado</span>
       </div>
 
       <div className="brand-library-scroll">

@@ -8,6 +8,7 @@ import { useEdit } from '../context/EditContext.jsx'
 import { getCatalogSnapshot, invalidateCatalogCache, loadCatalogSnapshot } from '../lib/catalogCache.js'
 import { canonicalSectionsForSynthetic, canonicalSummaryAdditions } from '../lib/canonicalGuides.js'
 import { slugify } from '../lib/text.js'
+import { statusLabel } from '../lib/uiText.js'
 
 function buildFamilyView(snapshot, brandSlug, familySlug) {
   if (!snapshot) return null
@@ -183,7 +184,7 @@ function Family() {
     await loadView(true)
     setActiveGuideId(createdId)
     window.history.replaceState(null, '', `${window.location.pathname}#guide-${createdId}`)
-    setMessage('✓ Subcarpeta creada. Ya podés cargar su biblioteca y sus pasos.')
+    setMessage('✓ Subcarpeta creada. Ya puede cargar su biblioteca y sus pasos.')
   }
 
   async function deleteSubfolder(guide) {
@@ -343,7 +344,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
     await loadView(true)
     setActiveGuideId(String(create.data.id))
     window.history.replaceState(null, '', `${window.location.pathname}#guide-${create.data.id}`)
-    setMessage('✓ Subcarpeta convertida a editable. Conserva el contenido base y ya admite biblioteca propia.')
+    setMessage('✓ Subcarpeta convertida a editable. Conserva el contenido base y ya admite una biblioteca propia.')
   }
 
   if (loading && !view) return <div className="page-card skeleton-card-v124">Cargando instalaciones…</div>
@@ -355,7 +356,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
 
       <header className="family-hero-v9">
         <div className="family-hero-image-v9">
-          {heroCover ? <img src={heroCover} alt={`${brand?.name} ${family?.name}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label={`Sin foto de ${family?.name}`} />}
+          {heroCover ? <img src={heroCover} alt={`${brand?.name} ${family?.name}`} loading="eager" fetchPriority="high" decoding="async" /> : <VehiclePlaceholder label={`Imagen no disponible para ${family?.name}`} />}
         </div>
         <div className="family-hero-copy-v9">
           <div className="page-eyebrow">{brand?.name}</div>
@@ -367,7 +368,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
               ? <div className="structure-inline-actions-v127"><button type="button" onClick={saveFamilyName}>Guardar</button><button type="button" onClick={() => { setFamilyEditing(false); setFamilyName(family?.name || '') }}>Cancelar</button></div>
               : <button type="button" className="structure-pencil-v127" onClick={() => setFamilyEditing(true)} title="Editar nombre del modelo"><AppIcon name="edit" size={16} /></button>)}
           </div>
-          <p>Subcarpetas de instalación, variantes y documentación técnica disponible para este modelo.</p>
+          <p>Subcarpetas de instalación, variantes y documentación técnica disponibles para este modelo.</p>
           <div className="family-hero-stats-v9">
             <div><strong>{allFolders.length}</strong><span>Subcarpetas</span></div>
             <div><strong>{validated}</strong><span>Validadas</span></div>
@@ -379,7 +380,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
 
       <section className="subfolder-section-v127">
         <div className="section-heading-v9 structure-heading-v127">
-          <div><span>SUBCARPETAS</span><h2>Instalaciones y variantes</h2><p>Cada subcarpeta tiene su propio instructivo y una biblioteca general de archivos.</p></div>
+          <div><span>SUBCARPETAS</span><h2>Instalaciones y variantes</h2><p>Cada subcarpeta contiene su documentación específica y una biblioteca general de archivos.</p></div>
           {editing && <button type="button" className="create-subfolder-v127" onClick={() => setCreateOpen(current => !current)}>+ Nueva subcarpeta</button>}
         </div>
 
@@ -400,8 +401,8 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
             return (
               <div key={guide.id} className={`subfolder-card-shell-v1272 ${active ? 'active' : ''}`}>
                 <button type="button" className={`subfolder-card-v127 ${active ? 'active' : ''}`} onClick={() => openFolder(guide)}>
-                  <div className="subfolder-cover-v127">{cover ? <img src={cover} alt="" loading={index < 4 ? 'eager' : 'lazy'} decoding="async" /> : <VehiclePlaceholder label="Sin portada" />}</div>
-                  <div className="subfolder-copy-v127"><span>{folderKind(guide)}</span><strong>{guide.title}</strong><small>{guide.equipment || 'Equipo no especificado'} · {guide.status || 'BORRADOR'}</small></div>
+                  <div className="subfolder-cover-v127">{cover ? <img src={cover} alt="" loading={index < 4 ? 'eager' : 'lazy'} decoding="async" /> : <VehiclePlaceholder label="Imagen no disponible" />}</div>
+                  <div className="subfolder-copy-v127"><span>{folderKind(guide)}</span><strong>{guide.title}</strong><small>{guide.equipment || 'Equipo no especificado'} · {statusLabel(guide.status)}</small></div>
                   <AppIcon name="arrow" size={18} />
                 </button>
                 {editing && (
@@ -419,7 +420,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
               </div>
             )
           })}
-          {allFolders.length === 0 && <div className="page-card">{editing ? 'No hay subcarpetas todavía. Creá la primera con “Nueva subcarpeta”.' : 'No hay documentación registrada para este modelo.'}</div>}
+          {allFolders.length === 0 && <div className="page-card">{editing ? 'No hay subcarpetas todavía. Cree la primera con “Nueva subcarpeta”.' : 'No hay documentación registrada para este modelo.'}</div>}
         </div>
       </section>
 
@@ -427,7 +428,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
         <section id="active-subfolder-v127" className="active-subfolder-v127">
           {editing && activeGuide.synthetic && (
             <div className="materialize-canonical-v127">
-              <div><strong>Contenido integrado</strong><span>Esta guía proviene del contenido de respaldo de la aplicación. Convertíla una vez para editarla, cargar archivos y administrarla como cualquier otra subcarpeta.</span></div>
+              <div><strong>Contenido integrado</strong><span>Esta guía proviene del contenido de respaldo de la aplicación. Conviértala una vez para editarla, cargar archivos y administrarla como cualquier otra subcarpeta.</span></div>
               <button type="button" onClick={() => materializeSyntheticGuide(activeGuide)}>Convertir en subcarpeta editable</button>
             </div>
           )}

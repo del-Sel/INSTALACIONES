@@ -45,7 +45,7 @@ function EditAccess() {
         <div className="edit-lock edit-lock-v6"><AppIcon name="edit" size={21} /></div>
         <div className="page-eyebrow">EDICIÓN</div>
         <h1>Activar modo edición</h1>
-        <p>Ingresá el código de administración para habilitar la edición directa.</p>
+        <p>Ingrese el código de administración para habilitar la edición directa.</p>
 
         <form onSubmit={enviar} className="pin-form">
           <label htmlFor="edit-pin">Código de edición</label>
@@ -62,7 +62,7 @@ function EditAccess() {
           />
           {error && <div className="form-error">{error}</div>}
           <button type="submit" className="primary-button" disabled={loading || pin.length !== 5}>
-            {loading ? 'Comprobando...' : 'Entrar en modo edición'}
+            {loading ? 'Verificando…' : 'Ingresar al modo edición'}
           </button>
         </form>
 
