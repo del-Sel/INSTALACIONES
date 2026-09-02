@@ -36,6 +36,7 @@ function friendlyType(type) {
 }
 
 const META_LABEL_SECTION_TYPE = 'v1272_meta_labels'
+const DEFAULT_META_FIELD_ORDER = ['equipment', 'variant', 'guideType', 'year', 'sections', 'material']
 const DEFAULT_META_LABELS = {
   equipment: 'Equipo',
   variant: 'Subcarpeta / variante',
@@ -45,20 +46,55 @@ const DEFAULT_META_LABELS = {
   material: 'Material asociado',
   sectionsValue: '',
   materialValue: '',
+  fieldOrder: DEFAULT_META_FIELD_ORDER,
+  customFields: [],
+}
+
+function normalizeMetaLabels(parsed = {}) {
+  const source = parsed && typeof parsed === 'object' ? parsed : {}
+  const customFields = Array.isArray(source.customFields)
+    ? source.customFields
+      .filter(item => item && item.id)
+      .map(item => ({ id: String(item.id), label: String(item.label || 'Campo personalizado'), value: String(item.value || '') }))
+    : []
+  const customIds = new Set(customFields.map(item => item.id))
+  const allowedIds = new Set([...DEFAULT_META_FIELD_ORDER, ...customIds])
+  const hasRequestedOrder = Array.isArray(source.fieldOrder)
+  const requestedOrder = hasRequestedOrder ? source.fieldOrder.map(String) : DEFAULT_META_FIELD_ORDER
+  const fieldOrder = requestedOrder
+    .filter((id, index, list) => allowedIds.has(id) && list.indexOf(id) === index)
+
+  return {
+    ...DEFAULT_META_LABELS,
+    ...source,
+    fieldOrder,
+    customFields,
+  }
 }
 
 function parseMetaLabels(section) {
-  if (!section?.content) return { ...DEFAULT_META_LABELS }
+  if (!section?.content) return normalizeMetaLabels()
   try {
-    const parsed = JSON.parse(section.content)
-    return { ...DEFAULT_META_LABELS, ...(parsed && typeof parsed === 'object' ? parsed : {}) }
+    return normalizeMetaLabels(JSON.parse(section.content))
   } catch {
-    return { ...DEFAULT_META_LABELS }
+    return normalizeMetaLabels()
   }
 }
 
 function metaLabelsEqual(a = {}, b = {}) {
-  return Object.keys(DEFAULT_META_LABELS).every(key => String(a?.[key] || '') === String(b?.[key] || ''))
+  const comparable = value => JSON.stringify({
+    equipment: value?.equipment || '',
+    variant: value?.variant || '',
+    guideType: value?.guideType || '',
+    year: value?.year || '',
+    sections: value?.sections || '',
+    material: value?.material || '',
+    sectionsValue: value?.sectionsValue || '',
+    materialValue: value?.materialValue || '',
+    fieldOrder: Array.isArray(value?.fieldOrder) ? value.fieldOrder : DEFAULT_META_FIELD_ORDER,
+    customFields: Array.isArray(value?.customFields) ? value.customFields : [],
+  })
+  return comparable(a) === comparable(b)
 }
 
 function isDisplayableImageAsset(asset = {}) {
@@ -377,19 +413,100 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     setMetaLabels(current => ({ ...current, [field]: value }))
   }
 
-  function metaLabel(field) {
-    const editValue = String(metaLabels?.[field] ?? DEFAULT_META_LABELS[field])
-    const displayValue = editValue.trim() || DEFAULT_META_LABELS[field]
+  const customMetaFields = Array.isArray(metaLabels.customFields) ? metaLabels.customFields : []
+  const customMetaFieldMap = new Map(customMetaFields.map(field => [field.id, field]))
+  const metaFieldOrder = Array.isArray(metaLabels.fieldOrder) ? metaLabels.fieldOrder : DEFAULT_META_FIELD_ORDER
+
+  function updateCustomMetaField(id, field, value) {
+    setMetaLabels(current => ({
+      ...current,
+      customFields: (current.customFields || []).map(item => item.id === id ? { ...item, [field]: value } : item),
+    }))
+  }
+
+  function addMetaField(event) {
+    const fieldId = event.currentTarget.value
+    event.currentTarget.value = ''
+    if (!fieldId) return
+
+    if (fieldId === 'custom') {
+      const id = `custom_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
+      setMetaLabels(current => ({
+        ...current,
+        fieldOrder: [...(current.fieldOrder || DEFAULT_META_FIELD_ORDER), id],
+        customFields: [...(current.customFields || []), { id, label: 'Nuevo campo', value: '' }],
+      }))
+      setMessage('Campo agregado · edite su rótulo y contenido')
+      return
+    }
+
+    setMetaLabels(current => ({
+      ...current,
+      fieldOrder: [...(current.fieldOrder || DEFAULT_META_FIELD_ORDER), fieldId],
+    }))
+    setMessage('Campo agregado')
+  }
+
+  function removeMetaField(fieldId) {
+    setMetaLabels(current => ({
+      ...current,
+      fieldOrder: (current.fieldOrder || DEFAULT_META_FIELD_ORDER).filter(id => id !== fieldId),
+      customFields: (current.customFields || []).filter(item => item.id !== fieldId),
+    }))
+    setMessage('Campo quitado · guarde los cambios para confirmar')
+  }
+
+  function renderMetaLabel(fieldId, fallbackLabel, customField = null) {
+    const editValue = customField
+      ? String(customField.label || '')
+      : String(metaLabels?.[fieldId] ?? fallbackLabel)
+    const displayValue = editValue.trim() || fallbackLabel
     if (!editing) return <span>{displayValue}</span>
     return (
       <span className="meta-label-editor-v1272">
         <input
           className="meta-label-input-v1272"
           value={editValue}
-          onChange={event => changeMetaLabel(field, event.target.value)}
-          aria-label={`Editar rótulo ${DEFAULT_META_LABELS[field]}`}
+          onChange={event => customField ? updateCustomMetaField(fieldId, 'label', event.target.value) : changeMetaLabel(fieldId, event.target.value)}
+          aria-label={`Editar rótulo ${fallbackLabel}`}
         />
+        <button type="button" className="meta-field-remove-v1272" onClick={() => removeMetaField(fieldId)} aria-label={`Quitar campo ${displayValue}`}>×</button>
       </span>
+    )
+  }
+
+  function renderMetaField(fieldId) {
+    const customField = customMetaFieldMap.get(fieldId)
+    if (customField) {
+      return (
+        <div key={fieldId} className="meta-field-v1272">
+          {renderMetaLabel(fieldId, 'Campo personalizado', customField)}
+          {editing
+            ? <input value={customField.value || ''} onChange={event => updateCustomMetaField(fieldId, 'value', event.target.value)} placeholder="Texto libre" />
+            : <strong>{customField.value || '—'}</strong>}
+        </div>
+      )
+    }
+
+    const field = {
+      equipment: { label: 'Equipo', value: guide?.equipment || '', placeholder: 'Ej.: FMD-1000', onChange: value => changeGuide('equipment', value) },
+      variant: { label: 'Subcarpeta / variante', value: guide?.variant || '', placeholder: 'Nombre o variante', onChange: value => changeGuide('variant', value) },
+      guideType: { label: 'Tipo de guía', value: guide?.guide_type || 'MODELO', type: 'select', onChange: value => changeGuide('guide_type', value) },
+      year: { label: 'Año / versión', value: guide?.year_text || '', placeholder: 'Ej.: 2022 en adelante', onChange: value => changeGuide('year_text', value) },
+      sections: { label: 'Apartados principales', value: metaLabels.sectionsValue || '', placeholder: 'Texto libre', onChange: value => changeMetaLabel('sectionsValue', value) },
+      material: { label: 'Material asociado', value: metaLabels.materialValue || '', placeholder: 'Texto libre', onChange: value => changeMetaLabel('materialValue', value) },
+    }[fieldId]
+
+    if (!field) return null
+    return (
+      <div key={fieldId} className="meta-field-v1272">
+        {renderMetaLabel(fieldId, field.label)}
+        {editing
+          ? field.type === 'select'
+            ? <select value={field.value} onChange={event => field.onChange(event.target.value)}><option value="BASE">GENERAL</option><option value="VARIANTE">VARIANTE</option><option value="MODELO">INSTALACIÓN</option></select>
+            : <input value={field.value} onChange={event => field.onChange(event.target.value)} placeholder={field.placeholder} />
+          : <strong>{fieldId === 'guideType' ? friendlyType(field.value) : field.value || '—'}</strong>}
+      </div>
     )
   }
 
@@ -1244,13 +1361,22 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       </header>
 
       <section className={`document-meta-v7 document-meta-v127 ${editing ? 'editing' : ''}`}>
-        <div>{metaLabel('equipment')}{editing ? <input value={guide?.equipment || ''} onChange={event => changeGuide('equipment', event.target.value)} placeholder="Ej.: FMD-1000" /> : <strong>{guide?.equipment || 'No especificado'}</strong>}</div>
-        <div>{metaLabel('variant')}{editing ? <input value={guide?.variant || ''} onChange={event => changeGuide('variant', event.target.value)} placeholder="Nombre o variante" /> : <strong>{guide?.variant || guide?.title || 'General'}</strong>}</div>
-        <div>{metaLabel('guideType')}{editing ? <select value={guide?.guide_type || 'MODELO'} onChange={event => changeGuide('guide_type', event.target.value)}><option value="BASE">GENERAL</option><option value="VARIANTE">VARIANTE</option><option value="MODELO">INSTALACIÓN</option></select> : <strong>{friendlyType(guide?.guide_type)}</strong>}</div>
-        <div>{metaLabel('year')}{editing ? <input value={guide?.year_text || ''} onChange={event => changeGuide('year_text', event.target.value)} placeholder="Ej.: 2022 en adelante" /> : <strong>{guide?.year_text || 'No especificado'}</strong>}</div>
-        <div>{metaLabel('sections')}{editing ? <input value={metaLabels.sectionsValue || ''} onChange={event => changeMetaLabel('sectionsValue', event.target.value)} placeholder="Texto libre" /> : <strong>{metaLabels.sectionsValue || '—'}</strong>}</div>
-        <div>{metaLabel('material')}{editing ? <input value={metaLabels.materialValue || ''} onChange={event => changeMetaLabel('materialValue', event.target.value)} placeholder="Texto libre" /> : <strong>{metaLabels.materialValue || '—'}</strong>}</div>
+        {metaFieldOrder.map(renderMetaField)}
       </section>
+
+      {editing && (
+        <div className="meta-fields-toolbar-v1272">
+          <span>Campos visibles</span>
+          <select defaultValue="" onChange={addMetaField} aria-label="Agregar campo al encabezado">
+            <option value="">Agregar campo...</option>
+            {DEFAULT_META_FIELD_ORDER.filter(fieldId => !metaFieldOrder.includes(fieldId)).map(fieldId => (
+              <option key={fieldId} value={fieldId}>{DEFAULT_META_LABELS[fieldId]}</option>
+            ))}
+            <option value="custom">Campo personalizado</option>
+          </select>
+          <small>Puede quitar cualquier campo con × y volver a agregarlo cuando lo necesite.</small>
+        </div>
+      )}
 
       {editing && (
         <div className="edit-quick-bar-v121">
