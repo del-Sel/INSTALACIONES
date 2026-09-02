@@ -4,11 +4,10 @@ import { useEdit } from '../context/EditContext.jsx'
 import { safeFileName } from '../lib/text.js'
 import { invalidateCatalogCache } from '../lib/catalogCache.js'
 import { assetContextGroup, assetDisplayLabel, assetIcon, assetLabel, detectedAssetDescription, detectedAssetPreview, detectedAssetType, formatBytes, isBrowserImage, isBrowserVideo } from '../lib/library.js'
-import { compactAssetStats, guideLevel, guideTags, sectionKind, sectionLane, visibleGuideAssets } from '../lib/guide.js'
+import { visibleGuideAssets } from '../lib/guide.js'
 import AppIcon from '../components/AppIcon.jsx'
 import VehiclePlaceholder from '../components/VehiclePlaceholder.jsx'
 import fulmarLogo from '../assets/fulmar-logo.jpg'
-import { applyCanonicalFallback, canonicalSectionsForSynthetic } from '../lib/canonicalGuides.js'
 
 
 function AssetIdentification({ asset }) {
@@ -44,6 +43,8 @@ const DEFAULT_META_LABELS = {
   year: 'Año / versión',
   sections: 'Apartados principales',
   material: 'Material asociado',
+  sectionsValue: '',
+  materialValue: '',
 }
 
 function parseMetaLabels(section) {
@@ -58,15 +59,6 @@ function parseMetaLabels(section) {
 
 function metaLabelsEqual(a = {}, b = {}) {
   return Object.keys(DEFAULT_META_LABELS).every(key => String(a?.[key] || '') === String(b?.[key] || ''))
-}
-
-function normalizePickerText(value = '') {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
 }
 
 function isDisplayableImageAsset(asset = {}) {
@@ -86,82 +78,10 @@ function paragraphs(content = '') {
   return clean.split('\n').map(x => x.trim()).filter(Boolean)
 }
 
-function tableRows(content = '') {
-  return String(content || '')
-    .split('\n')
-    .map(line => line.split('|').map(cell => cell.trim()))
-    .filter(row => row.some(Boolean))
-}
-
-function structuredTechnical(content = '') {
-  const lines = paragraphs(content)
-  const pins = []
-  const signalGroups = []
-  const facts = []
-  const text = []
-
-  for (const line of lines) {
-    const pinMatches = [...line.matchAll(/PIN\s*(\d+)\s*:\s*([^|\n]+)/gi)]
-    if (pinMatches.length) {
-      for (const match of pinMatches) pins.push({ pin: match[1], label: match[2].trim() })
-      continue
-    }
-
-    if (line.includes('|')) {
-      const parts = line.split('|').map(part => part.trim()).filter(Boolean)
-      if (parts.length >= 2 && parts.length <= 8) {
-        signalGroups.push(parts)
-        continue
-      }
-    }
-
-    const factMatch = line.match(/^([^:]{2,48}):\s*(.+)$/)
-    if (factMatch && !line.includes('://')) {
-      facts.push({ label: factMatch[1].trim(), value: factMatch[2].trim() })
-      continue
-    }
-
-    text.push(line)
-  }
-
-  return { pins, signalGroups, facts, text }
-}
-
-function iconForKind(kind) {
-  return {
-    intro: '01',
-    materials: 'M',
-    procedure: '→',
-    technical: 'CAN',
-    technical_table: 'DAT',
-    configuration: 'CFG',
-    configuration_files: 'CFG',
-    source_files: 'DAT',
-    verification: '✓',
-    notes: 'i',
-  }[kind] || 'i'
-}
-
-function labelForKind(kind) {
-  return {
-    intro: 'Descripción',
-    materials: 'Elementos necesarios',
-    procedure: 'Instalación',
-    technical: 'Datos técnicos',
-    technical_table: 'Datos técnicos',
-    configuration: 'Configuración',
-    configuration_files: 'Configuración',
-    source_files: 'Documentación asociada',
-    verification: 'Comprobación final',
-    notes: 'Observaciones técnicas',
-  }[kind] || 'Información'
-}
-
 function InlineGuide({ guideSummary, brand, family, priority = false, onGuideChanged }) {
   const { editing: globalEditing } = useEdit()
-  const syntheticCanonical = Boolean(guideSummary?.synthetic && guideSummary?.canonicalKey)
   const [guideEditOpen, setGuideEditOpen] = useState(false)
-  const editing = globalEditing && guideEditOpen && !syntheticCanonical
+  const editing = globalEditing && guideEditOpen
   const rootRef = useRef(null)
   const [shouldLoad, setShouldLoad] = useState(Boolean(priority))
 
@@ -180,11 +100,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
   const [assetPickerType, setAssetPickerType] = useState('images')
   const [assetPickerReturn, setAssetPickerReturn] = useState(null)
   const [assigningAssetId, setAssigningAssetId] = useState(null)
-  const [pickerExtraAssets, setPickerExtraAssets] = useState([])
-  const [pickerLoading, setPickerLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [autoSaveBlocked, setAutoSaveBlocked] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -194,7 +111,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   useEffect(() => {
     setGuideEditOpen(false)
-    setPickerExtraAssets([])
   }, [guideSummary?.id])
 
   useEffect(() => {
@@ -247,20 +163,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     if (!guideSummary?.id) return
     setLoading(true)
     setError('')
-
-    if (syntheticCanonical) {
-      const canonical = canonicalSectionsForSynthetic(guideSummary.canonicalKey)
-      setGuide(guideSummary)
-      setOriginalGuide(guideSummary)
-      setMetaLabels({ ...DEFAULT_META_LABELS })
-      setOriginalMetaLabels({ ...DEFAULT_META_LABELS })
-      setMetaLabelSectionId(null)
-      setCollection(null)
-      setAssets([])
-      setSections(canonical)
-      setLoading(false)
-      return
-    }
 
     // Primera ronda: todo lo que depende solamente del ID de la guía viaja en paralelo.
     const [guideResult, sectionResult, libraryLinkResult] = await Promise.all([
@@ -350,17 +252,13 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       images: (imagesBySection.get(section.id) || []).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
     }))
 
-    setSections(editing ? hydratedSections : applyCanonicalFallback({ brand, family, guide: g, sections: hydratedSections }))
+    setSections(hydratedSections)
 
     setLoading(false)
   }
 
   const visibleAssets = useMemo(() => visibleGuideAssets(assets), [assets])
-  const allSectionText = useMemo(() => sections.map(section => section.content || '').join('\n'), [sections])
-  const tags = useMemo(() => guideTags(`${guide?.summary || ''}\n${allSectionText}`, visibleAssets), [guide, allSectionText, visibleAssets])
-  const level = useMemo(() => guideLevel(sections, visibleAssets), [sections, visibleAssets])
-  const assetStats = useMemo(() => compactAssetStats(visibleAssets), [visibleAssets])
-  const cover = guide?.cover_url || collection?.cover_url || visibleAssets.find(asset => asset.asset_type === 'image')?.public_url || ''
+  const cover = guide?.cover_url || ''
 
   const imageAssets = useMemo(
     () => visibleAssets.filter(isDisplayableImageAsset),
@@ -404,11 +302,11 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   const assetPickerSourceAssets = useMemo(() => {
     const merged = new Map()
-    for (const asset of [...visibleAssets, ...visibleGuideAssets(pickerExtraAssets)]) {
+    for (const asset of visibleAssets) {
       if (asset?.id != null) merged.set(Number(asset.id), asset)
     }
     return [...merged.values()]
-  }, [visibleAssets, pickerExtraAssets])
+  }, [visibleAssets])
 
   const assetPickerCandidates = useMemo(() => {
     if (!assetPickerSection) return []
@@ -429,8 +327,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
   }, [assetPickerSection, assetPickerSearch, assetPickerType, assetPickerSourceAssets])
 
   const visibleSections = useMemo(() => sections.filter(section => editing || (section.content || '').trim() || section.linkedAssets?.length || section.images?.length), [sections, editing])
-  const mainSections = useMemo(() => visibleSections.filter(section => sectionLane(section.section_type) === 'main'), [visibleSections])
-  const supportSections = useMemo(() => visibleSections.filter(section => sectionLane(section.section_type) === 'support'), [visibleSections])
+  const mainSections = visibleSections
   const contentKind = guide?.content_kind || 'INSTRUCTIVO'
   const isReference = contentKind === 'REFERENCIA'
   const isPartial = contentKind === 'PARCIAL'
@@ -472,26 +369,18 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [editing, hasUnsavedChanges])
 
-  useEffect(() => {
-    if (!editing || !hasUnsavedChanges || saving || autoSaveBlocked || !guide || assetPickerSectionId || coverPicker) return undefined
-    const timer = window.setTimeout(() => saveAll('auto'), 1100)
-    return () => window.clearTimeout(timer)
-  }, [editing, hasUnsavedChanges, saving, autoSaveBlocked, guide, sections, metaLabels, assetPickerSectionId, coverPicker])
-
   function changeGuide(field, value) {
-    setAutoSaveBlocked(false)
     setGuide(current => ({ ...current, [field]: value }))
   }
 
   function changeMetaLabel(field, value) {
-    setAutoSaveBlocked(false)
     setMetaLabels(current => ({ ...current, [field]: value }))
   }
 
-  function metaLabel(field, automatic = false) {
+  function metaLabel(field) {
     const editValue = String(metaLabels?.[field] ?? DEFAULT_META_LABELS[field])
     const displayValue = editValue.trim() || DEFAULT_META_LABELS[field]
-    if (!editing) return <span>{displayValue}{automatic && <em>Automático</em>}</span>
+    if (!editing) return <span>{displayValue}</span>
     return (
       <span className="meta-label-editor-v1272">
         <input
@@ -500,37 +389,15 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
           onChange={event => changeMetaLabel(field, event.target.value)}
           aria-label={`Editar rótulo ${DEFAULT_META_LABELS[field]}`}
         />
-        {automatic && <em>Automático</em>}
       </span>
     )
   }
 
   function changeSection(id, field, value) {
-    setAutoSaveBlocked(false)
     setSections(current => current.map(section => section.id === id ? { ...section, [field]: value } : section))
   }
 
-  async function changeSectionCategory(section, value) {
-    if (!editing || !section?.id || !value) return
-    const [lane, kind] = value.split(':')
-    const baseByKind = {
-      intro: 'intro', materials: 'materials', procedure: 'step', technical: 'technical',
-      technical_table: 'technical_table', configuration: 'configuration', verification: 'verification', notes: 'notes', source_files: 'source_files', material: 'material', configuration_files: 'configuration_files',
-    }
-    const base = baseByKind[kind] || 'notes'
-    const suffix = String(Date.now()).slice(-8)
-    const sectionType = `v12_${lane === 'support' ? 'support' : 'main'}_${base}_${suffix}`
-    const result = await supabase.from('guide_sections').update({ section_type: sectionType }).eq('id', section.id)
-    if (result.error) {
-      setMessage(result.error.message)
-      return
-    }
-
-    setSections(current => current.map(item => item.id === section.id ? { ...item, section_type: sectionType } : item))
-    setMessage('Tipo de apartado actualizado · sin recargar')
-  }
-
-  async function saveAll(mode = 'manual') {
+  async function saveAll() {
     if (!editing || !guide || saving) return
 
     const guideSnapshot = { ...guide }
@@ -545,9 +412,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       original_sort_order: Number(section.original_sort_order || 0),
     }))
 
-    if (mode === 'manual') setAutoSaveBlocked(false)
     setSaving(true)
-    setMessage(mode === 'auto' ? 'Guardando automáticamente…' : 'Guardando cambios…')
+    setMessage('Guardando cambios…')
 
     try {
       const guideResult = await supabase.from('guides').update({
@@ -617,33 +483,23 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
           original_sort_order: saved.sort_order,
         }
       }))
-      setAutoSaveBlocked(false)
-      setMessage(mode === 'auto' ? '✓ Cambios guardados automáticamente' : '✓ Guardado · puede continuar editando sin perder su ubicación')
+      setMessage('✓ Guardado · puede continuar editando sin perder su ubicación')
     } catch (saveError) {
-      if (mode === 'auto') setAutoSaveBlocked(true)
-      setMessage((saveError.message || 'No se pudieron guardar los cambios') + (mode === 'auto' ? ' · puede reintentar con Guardar cambios' : ''))
+      setMessage(saveError.message || 'No se pudieron guardar los cambios')
     } finally {
       setSaving(false)
     }
   }
 
-  async function addSection(kind = 'notes') {
+  async function addSection() {
     if (!editing || !guide) return
     const maxOrder = sections.reduce((max, section) => Math.max(max, Number(section.sort_order || 0)), 0)
-    const type = `custom_${kind}_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
-    const defaults = {
-      materials: 'Elementos necesarios',
-      procedure: 'Nuevo paso',
-      technical: 'Datos técnicos',
-      configuration: 'Configuración',
-      verification: 'Comprobación final',
-      notes: 'Observaciones técnicas',
-    }
+    const type = `v12_main_notes_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
 
     const result = await supabase.from('guide_sections').insert({
       guide_id: guide.id,
       section_type: type,
-      title: defaults[kind] || 'Nueva sección',
+      title: 'Nuevo apartado',
       content: '',
       sort_order: maxOrder + 10,
     }).select('*').single()
@@ -662,7 +518,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       images: [],
     }
     setSections(current => [...current, created].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)))
-    setMessage('Apartado agregado · seguí editando')
+    setMessage('Apartado agregado · edite el título y el texto')
     requestAnimationFrame(() => document.getElementById(`section-${created.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
   }
 
@@ -893,7 +749,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
       const nextAssets = [...assets, ...uploaded]
       setAssets(nextAssets)
-      setPickerExtraAssets(current => [...current.filter(item => !uploaded.some(newItem => Number(newItem.id) === Number(item.id))), ...uploaded])
       await refreshLibraryStats(targetCollection.id, nextAssets)
       invalidateCatalogCache()
       setMessage(`✓ ${uploaded.length} archivo${uploaded.length === 1 ? '' : 's'} agregado${uploaded.length === 1 ? '' : 's'} a la biblioteca general`)
@@ -903,62 +758,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     }
   }
 
-  async function loadPickerFamilyAssets() {
-    if (!globalEditing || !brand?.name) return
-    setPickerLoading(true)
-    try {
-      const collectionResult = await supabase
-        .from('library_collections')
-        .select('id,title,source_brand')
-        .eq('source_brand', brand.name)
-        .order('title')
-
-      if (collectionResult.error) throw collectionResult.error
-
-      const familyKey = normalizePickerText(family?.name)
-      const guideKey = normalizePickerText(guide?.title)
-      const familyTokens = familyKey.split(/\s+/).filter(token => token.length > 1)
-      const relevant = (collectionResult.data || []).filter(item => {
-        const title = normalizePickerText(item.title)
-        if (!title) return false
-        if (familyKey && title.includes(familyKey)) return true
-        if (familyTokens.length && familyTokens.every(token => title.includes(token))) return true
-        if (guideKey && (title.includes(guideKey) || guideKey.includes(title))) return true
-        return false
-      })
-
-      // Si el importador no dejó el nombre de familia en el título, mostramos igualmente
-      // el material de la marca. El buscador del selector permite acotarlo sin perder fotos.
-      const selectedCollections = relevant.length ? relevant : (collectionResult.data || [])
-      const collectionIds = selectedCollections.map(item => item.id)
-      if (!collectionIds.length) {
-        setPickerExtraAssets([])
-        return
-      }
-
-      const assetResult = await supabase
-        .from('library_assets')
-        .select('*')
-        .in('collection_id', collectionIds)
-        .order('sort_order')
-        .limit(800)
-
-      if (assetResult.error) throw assetResult.error
-      const titleById = new Map(selectedCollections.map(item => [Number(item.id), item.title]))
-      setPickerExtraAssets((assetResult.data || []).map(asset => ({
-        ...asset,
-        _picker_collection_title: titleById.get(Number(asset.collection_id)) || '',
-      })))
-    } catch (pickerError) {
-      console.error('No se pudo ampliar el material del selector:', pickerError)
-      setMessage('Se muestra el material vinculado. No se pudo ampliar la búsqueda a toda la familia.')
-    } finally {
-      setPickerLoading(false)
-    }
-  }
-
   function startGuideEdit() {
-    if (!globalEditing || syntheticCanonical) return
+    if (!globalEditing) return
     setGuideEditOpen(true)
   }
 
@@ -977,7 +778,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     setAssetPickerSearch('')
     setAssetPickerType('images')
     setAssetPickerSectionId(section.id)
-    loadPickerFamilyAssets()
   }
 
   function closeAssetPicker() {
@@ -1025,7 +825,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       return
     }
 
-    const asset = [...assets, ...pickerExtraAssets].find(item => Number(item.id) === numericId)
+    const asset = assets.find(item => Number(item.id) === numericId)
     if (asset) {
       setSections(currentSections => currentSections.map(item => item.id === section.id
         ? { ...item, linkedAssets: [...(item.linkedAssets || []), { ...asset, link_sort_order: nextOrder, link_section_id: section.id }] }
@@ -1267,43 +1067,23 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
   }
 
   function renderSection(section, index) {
-    const kind = sectionKind(section.section_type)
-    const lane = sectionLane(section.section_type)
-    const rows = kind === 'technical_table' ? tableRows(section.content) : []
+    const kind = 'notes'
+    const lane = 'main'
     const textParagraphs = paragraphs(section.content)
-    const structured = structuredTechnical(section.content)
-
-    const procedureSections = mainSections.filter(item => sectionKind(item.section_type) === 'procedure')
-    const procedureNumber = procedureSections.findIndex(item => item.id === section.id) + 1
-    const badge = lane === 'support' ? 'i' : kind === 'procedure' ? String(procedureNumber).padStart(2, '0') : kind === 'materials' ? 'M' : kind === 'verification' ? '✓' : 'i'
-    const cleanTitle = String(section.title || '').replace(/^\s*\d+\s*[.·)\-]\s*/, '')
+    const badge = String(index + 1).padStart(2, '0')
 
     return (
       <section key={section.id} id={`section-${section.id}`} className={`document-section-v7 kind-${kind} lane-${lane} ${editing ? 'editing' : ''}`}>
         <div className="document-section-head-v7">
           <div className="document-section-number-v7">{badge}</div>
           <div className="document-section-title-v7">
-            <span>{labelForKind(kind)}</span>
             {editing
               ? <input value={section.title || ''} onChange={event => changeSection(section.id, 'title', event.target.value)} />
-              : <h2>{cleanTitle}</h2>}
+              : <h2>{section.title || 'Apartado'}</h2>}
           </div>
 
           {editing && (
             <div className="section-actions-v7">
-              <select className="section-category-v10" value={`${lane}:${kind}`} onChange={event => changeSectionCategory(section, event.target.value)} title="Tipo de apartado">
-                <option value="main:intro">Descripción</option>
-                <option value="main:materials">Elementos necesarios</option>
-                <option value="main:procedure">Paso de instalación</option>
-                <option value="main:verification">Comprobación final</option>
-                <option value="support:technical">Datos técnicos</option>
-                <option value="support:technical_table">Tabla técnica</option>
-                <option value="support:configuration">Configuración</option>
-                <option value="support:configuration_files">Archivos de configuración</option>
-                <option value="support:source_files">Documentación asociada</option>
-                <option value="support:material">Material técnico</option>
-                <option value="support:notes">Observaciones técnicas</option>
-              </select>
               <button type="button" onClick={() => moveSection(section, -1)} title="Subir apartado">↑ Subir</button>
               <button type="button" onClick={() => moveSection(section, 1)} title="Bajar apartado">↓ Bajar</button>
               <button type="button" className="danger" onClick={() => deleteSection(section)}>Eliminar</button>
@@ -1319,53 +1099,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
               onChange={event => changeSection(section.id, 'content', event.target.value)}
               placeholder="Contenido de esta sección..."
             />
-          ) : kind === 'materials' ? (
-            <div className="real-materials-grid-v7">
-              {textParagraphs.map((item, itemIndex) => <div key={itemIndex}><span>{String(itemIndex + 1).padStart(2, '0')}</span><p>{item.replace(/^[-•*]\s*/, '')}</p></div>)}
-            </div>
-          ) : structured.pins.length || structured.signalGroups.length || structured.facts.length ? (
-            <div className="structured-technical-v83">
-              {structured.pins.length > 0 && (
-                <div className="pinout-grid-v83">
-                  {structured.pins.map((item, itemIndex) => (
-                    <div key={`${item.pin}-${itemIndex}`} className="pinout-card-v83">
-                      <span>PIN {item.pin}</span>
-                      <strong>{item.label}</strong>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {structured.signalGroups.map((group, groupIndex) => (
-                <div key={groupIndex} className="signal-chip-row-v83">
-                  {group.map((item, itemIndex) => <span key={itemIndex}>{item}</span>)}
-                </div>
-              ))}
-
-              {structured.facts.length > 0 && (
-                <div className="technical-facts-v10">
-                  {structured.facts.map((item, itemIndex) => (
-                    <div key={`${item.label}-${itemIndex}`}><span>{item.label}</span><strong>{item.value}</strong></div>
-                  ))}
-                </div>
-              )}
-
-              {structured.text.length > 0 && (
-                <div className="document-copy-v7">
-                  {structured.text.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph.replace(/^[-•*]\s*/, '')}</p>)}
-                </div>
-              )}
-            </div>
-          ) : kind === 'technical_table' && rows.length ? (
-            <div className="technical-table-wrap-v7">
-              <table className="technical-table-v7">
-                <tbody>
-                  {rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>{row.map((cell, cellIndex) => rowIndex === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           ) : (
             <div className="document-copy-v7">
               {textParagraphs.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph.replace(/^[-•*]\s*/, '')}</p>)}
@@ -1432,7 +1165,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
   if (!shouldLoad) return (
     <section ref={rootRef} id={`guide-${guideSummary?.id}`} className="guide-deferred-v124" aria-label={guideSummary?.title || 'Instalación'}>
       {guideSummary?.cover_url && <img src={guideSummary.cover_url} alt="" loading="lazy" decoding="async" />}
-      <div><span>INSTALACIÓN</span><h2>{guideSummary?.title || 'Instalación técnica'}</h2><p>{guideSummary?.summary || 'El contenido se cargará automáticamente al acercarte a esta guía.'}</p></div>
+      <div><span>INSTALACIÓN</span><h2>{guideSummary?.title || 'Instalación técnica'}</h2><p>{guideSummary?.summary || 'Abra esta guía para consultar su contenido.'}</p></div>
     </section>
   )
   if (loading) return <section ref={rootRef} id={`guide-${guideSummary?.id}`} className="guide-loading-v124" aria-busy="true"><div className="guide-loading-bar-v124" /><span>Cargando instalación…</span></section>
@@ -1440,7 +1173,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   return (
     <section ref={rootRef} id={`guide-${guide?.id || guideSummary?.id}`} className={`inline-guide-shell-v9 ${isReference ? 'reference' : isPartial ? 'partial' : 'instruction'} ${globalEditing ? 'editor-available-v126' : ''}`}>
-      {globalEditing && !syntheticCanonical && (
+      {globalEditing && (
         <button
           type="button"
           className={`guide-pencil-edit-v126 ${editing ? 'active' : ''}`}
@@ -1488,7 +1221,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
             ) : (
               <span className={`content-kind-badge-v8 ${contentKind.toLowerCase()}`}>{contentKind === 'INSTRUCTIVO' ? 'INSTRUCTIVO' : contentKind === 'PARCIAL' ? 'PARCIAL' : 'REFERENCIA'}</span>
             )}
-            <span className={`guide-level ${level.key}`}>{level.label}</span>
           </div>
 
           {editing
@@ -1499,7 +1231,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
             ? <textarea className="document-summary-input-v7" value={guide?.summary || ''} placeholder="Resumen opcional" onChange={event => changeGuide('summary', event.target.value)} />
             : guide?.summary && <p>{guide.summary}</p>}
 
-          <div className="install-hero-chips-v3">{tags.map(tag => <span key={tag}>{tag}</span>)}</div>
         </div>
 
         <div className="document-cover-image-v7">
@@ -1517,8 +1248,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
         <div>{metaLabel('variant')}{editing ? <input value={guide?.variant || ''} onChange={event => changeGuide('variant', event.target.value)} placeholder="Nombre o variante" /> : <strong>{guide?.variant || guide?.title || 'General'}</strong>}</div>
         <div>{metaLabel('guideType')}{editing ? <select value={guide?.guide_type || 'MODELO'} onChange={event => changeGuide('guide_type', event.target.value)}><option value="BASE">GENERAL</option><option value="VARIANTE">VARIANTE</option><option value="MODELO">INSTALACIÓN</option></select> : <strong>{friendlyType(guide?.guide_type)}</strong>}</div>
         <div>{metaLabel('year')}{editing ? <input value={guide?.year_text || ''} onChange={event => changeGuide('year_text', event.target.value)} placeholder="Ej.: 2022 en adelante" /> : <strong>{guide?.year_text || 'No especificado'}</strong>}</div>
-        <div>{metaLabel('sections', true)}<strong>{mainSections.length || '—'}</strong></div>
-        <div>{metaLabel('material', true)}<strong>{assetStats.join(' · ') || 'Sin adjuntos'}</strong></div>
+        <div>{metaLabel('sections')}{editing ? <input value={metaLabels.sectionsValue || ''} onChange={event => changeMetaLabel('sectionsValue', event.target.value)} placeholder="Texto libre" /> : <strong>{metaLabels.sectionsValue || '—'}</strong>}</div>
+        <div>{metaLabel('material')}{editing ? <input value={metaLabels.materialValue || ''} onChange={event => changeMetaLabel('materialValue', event.target.value)} placeholder="Texto libre" /> : <strong>{metaLabels.materialValue || '—'}</strong>}</div>
       </section>
 
       {editing && (
@@ -1526,13 +1257,12 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
           <div className="edit-quick-status-v121">
             <strong>Editor rápido</strong>
             <span className={hasUnsavedChanges ? 'dirty' : 'saved'}>
-              {saving ? '● Guardando…' : hasUnsavedChanges ? '● Cambios pendientes · guardado automático activo' : '✓ Todo guardado'}
+              {saving ? '● Guardando…' : hasUnsavedChanges ? '● Cambios pendientes · guarde cuando termine' : '✓ Todo guardado'}
             </span>
           </div>
           <div className="edit-quick-actions-v121">
-            <button type="button" onClick={() => addSection('procedure')}>+ Paso</button>
-            <button type="button" onClick={() => addSection('technical')}>+ Info técnica</button>
-            <button type="button" className="primary-button" onClick={() => saveAll('manual')} disabled={saving || !hasUnsavedChanges}>
+            <button type="button" onClick={addSection}>+ Apartado</button>
+            <button type="button" className="primary-button" onClick={saveAll} disabled={saving || !hasUnsavedChanges}>
               {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
@@ -1562,25 +1292,11 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
             </div>
           ) : null}
 
-          {supportSections.length > 0 && (
-            <details className="technical-support-v8" id="material-tecnico">
-              <summary>Información técnica asociada <span>{supportSections.length} apartados</span></summary>
-              <div className="technical-support-body-v8">
-                {supportSections.map((section, index) => renderSection(section, mainSections.length + index))}
-              </div>
-            </details>
-          )}
-
           {editing && (
             <section className="add-section-panel-v7">
-              <div><strong>Agregar apartado</strong><span>Incorporá únicamente información documentada para este caso.</span></div>
+              <div><strong>Agregar apartado</strong><span>Cree tantos apartados como necesite. El título y el texto son completamente libres.</span></div>
               <div>
-                <button type="button" onClick={() => addSection('procedure')}>+ Paso de instalación</button>
-                <button type="button" onClick={() => addSection('materials')}>+ Elementos necesarios</button>
-                <button type="button" onClick={() => addSection('technical')}>+ Datos técnicos</button>
-                <button type="button" onClick={() => addSection('configuration')}>+ Configuración</button>
-                <button type="button" onClick={() => addSection('verification')}>+ Verificación</button>
-                <button type="button" onClick={() => addSection('notes')}>+ Observaciones</button>
+                <button type="button" onClick={addSection}>+ Nuevo apartado</button>
               </div>
             </section>
           )}
@@ -1671,11 +1387,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
           <div className="document-sidebar-box-v7">
             <strong>Contenido</strong>
             <nav>
-              {mainSections.map((section, index) => {
-                const kind = sectionKind(section.section_type)
-                return <a key={section.id} href={`#section-${section.id}`}><span>{String(index + 1).padStart(2, '0')}</span>{section.title || labelForKind(kind)}</a>
-              })}
-              {supportSections.length > 0 && <a href="#material-tecnico"><span>i</span>Información técnica</a>}
+              {mainSections.map((section, index) => <a key={section.id} href={`#section-${section.id}`}><span>{String(index + 1).padStart(2, '0')}</span>{section.title || 'Apartado'}</a>)}
             </nav>
           </div>
         </aside>
@@ -1683,8 +1395,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
       {editing && (
         <div className={`inline-save-bar-v4 document-save-v7 save-bar-v121 ${hasUnsavedChanges ? 'dirty' : 'saved'}`}>
-          <span>{message || (hasUnsavedChanges ? 'Guardado automático en un instante · Ctrl + S también guarda.' : '✓ Todo guardado. Puede continuar editando.')}</span>
-          <button type="button" className="primary-button" onClick={() => saveAll('manual')} disabled={saving || !hasUnsavedChanges}>
+          <span>{message || (hasUnsavedChanges ? 'Cambios pendientes · guarde cuando termine o use Ctrl + S.' : '✓ Todo guardado. Puede continuar editando.')}</span>
+          <button type="button" className="primary-button" onClick={saveAll} disabled={saving || !hasUnsavedChanges}>
             {saving ? 'Guardando…' : hasUnsavedChanges ? 'Guardar cambios' : 'Guardado'}
           </button>
         </div>
@@ -1753,14 +1465,10 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
               })}
             </div>
 
-            {pickerLoading && (
-              <div className="asset-picker-loading-v126"><span />Buscando fotos y archivos de {family?.name || brand?.name || 'esta familia'}…</div>
-            )}
-
-            {!pickerLoading && assetPickerCandidates.length === 0 && (
+            {assetPickerCandidates.length === 0 && (
               <div className="asset-picker-empty-v123">
                 <strong>No hay material que coincida.</strong>
-                <span>Probá con “Todo el material” o borrá la búsqueda. Si existe material de esta familia, el editor lo incorpora automáticamente al selector.</span>
+                <span>Pruebe con “Todo el material” o borre la búsqueda. El selector muestra únicamente material que usted ya cargó en esta guía.</span>
               </div>
             )}
 
@@ -1785,7 +1493,6 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
                 <AppIcon name="upload" size={18} /> Subir portada
                 <input type="file" accept="image/*" onChange={event => { uploadCover(event.target.files?.[0]); event.target.value = '' }} />
               </label>
-              <button type="button" onClick={() => setCoverUrl('')}>Usar portada automática</button>
             </div>
 
             <div className="cover-picker-grid-v7">

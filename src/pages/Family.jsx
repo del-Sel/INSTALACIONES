@@ -6,7 +6,6 @@ import InlineGuide from '../components/InlineGuide.jsx'
 import AppIcon from '../components/AppIcon.jsx'
 import { useEdit } from '../context/EditContext.jsx'
 import { getCatalogSnapshot, invalidateCatalogCache, loadCatalogSnapshot } from '../lib/catalogCache.js'
-import { canonicalSectionsForSynthetic, canonicalSummaryAdditions } from '../lib/canonicalGuides.js'
 import { slugify } from '../lib/text.js'
 import { statusLabel } from '../lib/uiText.js'
 
@@ -17,10 +16,7 @@ function buildFamilyView(snapshot, brandSlug, familySlug) {
   const family = snapshot.families.find(item => item.brand_id === brand.id && item.slug === familySlug)
   if (!family) return { brand, family: null, guides: [], collections: {} }
   const rawGuides = snapshot.guides.filter(item => item.family_id === family.id).sort((a, b) => String(a.content_kind || '').localeCompare(String(b.content_kind || '')) || String(a.title || '').localeCompare(String(b.title || '')))
-  const hiddenCanonicalKeys = new Set((snapshot.hiddenGuides || [])
-    .filter(item => item.family_id === family.id && String(item.variant || '').startsWith('canonical:'))
-    .map(item => String(item.variant || '').replace(/^canonical:/, '')))
-  const guides = canonicalSummaryAdditions(brand, family, rawGuides, hiddenCanonicalKeys)
+  const guides = rawGuides
   const collections = Object.fromEntries(snapshot.collections.map(item => [item.id, item]))
   return { brand, family, guides, collections }
 }
@@ -31,19 +27,6 @@ function folderKind(guide) {
   if (guide.guide_type === 'BASE') return 'General'
   if (guide.guide_type === 'VARIANTE') return 'Variante'
   return 'Instalación'
-}
-
-function canonicalKeyForGuide(brand, family, guide) {
-  const brandName = String(brand?.name || '').toLowerCase()
-  const familyName = String(family?.name || '').toLowerCase()
-  const identity = `${guide?.title || ''} ${guide?.variant || ''} ${guide?.slug || ''}`.toLowerCase()
-  if (!brandName.includes('iveco')) return guide?.canonicalKey || null
-  if (familyName === 'daily') {
-    if (/euro\s*3/.test(identity)) return 'daily-euro3'
-    if (/instalaci[oó]n general|daily general|general fmd/.test(identity)) return 'daily-general'
-  }
-  if ((familyName === 's-way' || familyName === 'sway') && guide?.content_kind !== 'REFERENCIA') return 'sway'
-  return guide?.canonicalKey || null
 }
 
 function Family() {
@@ -166,17 +149,6 @@ function Family() {
     setCreating(false)
     if (result.error) return setMessage(result.error.message)
 
-    // Cada subcarpeta nace con su biblioteca general. Si la colección no pudiera
-    // crearse, la guía igualmente queda creada y InlineGuide la generará al primer upload.
-    const libraryCreate = await supabase.from('library_collections').insert({
-      title: `${brand?.name || 'FUL-MAR'} · ${family?.name || 'Modelo'} · ${title}`,
-      source_brand: brand?.name || '',
-      description: `Biblioteca general de ${title}.`,
-    }).select('*').single()
-    if (!libraryCreate.error && libraryCreate.data?.id) {
-      await supabase.from('guides').update({ library_collection_id: libraryCreate.data.id }).eq('id', result.data.id)
-    }
-
     invalidateCatalogCache()
     const createdId = String(result.data.id)
     setCreateOpen(false)
@@ -200,32 +172,6 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
     setMessage('Eliminando subcarpeta…')
 
     try {
-      const canonicalKey = canonicalKeyForGuide(brand, family, guide)
-
-      if (guide.synthetic) {
-        const hideResult = await supabase.from('guides').insert({
-          family_id: family.id,
-          vehicle_id: null,
-          base_guide_id: null,
-          guide_type: 'MODELO',
-          variant: `canonical:${canonicalKey || guide.canonicalKey || guide.id}`,
-          slug: `hidden-${slugify(canonicalKey || guide.canonicalKey || String(guide.id))}`,
-          equipment: '',
-          status: 'BORRADOR',
-          content_kind: 'REFERENCIA',
-          title: '__OCULTA__',
-          summary: 'Marcador interno para ocultar una subcarpeta canónica eliminada por el editor.',
-        })
-        if (hideResult.error) throw hideResult.error
-        invalidateCatalogCache()
-        const nextView = await loadView(true)
-        const nextGuide = (nextView?.guides || [])[0] || null
-        setActiveGuideId(nextGuide ? String(nextGuide.id) : null)
-        window.history.replaceState(null, '', window.location.pathname + (nextGuide ? `#guide-${nextGuide.id}` : ''))
-        setMessage('✓ Subcarpeta eliminada.')
-        return
-      }
-
       const sectionResult = await supabase.from('guide_sections').select('id').eq('guide_id', guide.id)
       if (sectionResult.error) throw sectionResult.error
       const sectionIds = (sectionResult.data || []).map(item => item.id)
@@ -255,23 +201,6 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
       const guideDelete = await supabase.from('guides').delete().eq('id', guide.id)
       if (guideDelete.error) throw guideDelete.error
 
-      if (canonicalKey) {
-        const hideResult = await supabase.from('guides').insert({
-          family_id: family.id,
-          vehicle_id: null,
-          base_guide_id: null,
-          guide_type: 'MODELO',
-          variant: `canonical:${canonicalKey}`,
-          slug: `hidden-${slugify(canonicalKey)}`,
-          equipment: '',
-          status: 'BORRADOR',
-          content_kind: 'REFERENCIA',
-          title: '__OCULTA__',
-          summary: 'Marcador interno para impedir que una subcarpeta canónica eliminada vuelva a aparecer.',
-        })
-        if (hideResult.error) throw hideResult.error
-      }
-
       // La colección general se conserva si tiene archivos. Si está vacía y quedó huérfana,
       // la limpiamos para no llenar la biblioteca con carpetas vacías.
       if (guide.library_collection_id) {
@@ -298,53 +227,6 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
     } finally {
       setDeletingGuideId(null)
     }
-  }
-
-  async function materializeSyntheticGuide(synthetic) {
-    if (!editing || !synthetic?.synthetic || !synthetic?.canonicalKey) return
-    setMessage('Convirtiendo la referencia integrada en una subcarpeta editable…')
-    const create = await supabase.from('guides').insert({
-      family_id: family.id,
-      vehicle_id: null,
-      base_guide_id: null,
-      guide_type: synthetic.guide_type || 'MODELO',
-      variant: synthetic.variant || synthetic.title,
-      slug: synthetic.slug || slugify(synthetic.title),
-      equipment: synthetic.equipment || '',
-      status: synthetic.status || 'BORRADOR',
-      content_kind: synthetic.content_kind || 'INSTRUCTIVO',
-      title: synthetic.title,
-      summary: synthetic.summary || '',
-    }).select('*').single()
-    if (create.error) return setMessage(create.error.message)
-
-    const canonicalSections = canonicalSectionsForSynthetic(synthetic.canonicalKey)
-    if (canonicalSections.length) {
-      const rows = canonicalSections.map(section => ({
-        guide_id: create.data.id,
-        section_type: section.section_type,
-        title: section.title,
-        content: section.content || '',
-        sort_order: Number(section.sort_order || 0),
-      }))
-      const inserted = await supabase.from('guide_sections').insert(rows)
-      if (inserted.error) setMessage(`Subcarpeta creada, pero faltó copiar algunos apartados: ${inserted.error.message}`)
-    }
-
-    const libraryCreate = await supabase.from('library_collections').insert({
-      title: `${brand?.name || 'FUL-MAR'} · ${family?.name || 'Modelo'} · ${synthetic.title}`,
-      source_brand: brand?.name || '',
-      description: `Biblioteca general de ${synthetic.title}.`,
-    }).select('*').single()
-    if (!libraryCreate.error && libraryCreate.data?.id) {
-      await supabase.from('guides').update({ library_collection_id: libraryCreate.data.id }).eq('id', create.data.id)
-    }
-
-    invalidateCatalogCache()
-    await loadView(true)
-    setActiveGuideId(String(create.data.id))
-    window.history.replaceState(null, '', `${window.location.pathname}#guide-${create.data.id}`)
-    setMessage('✓ Subcarpeta convertida a editable. Conserva el contenido base y ya admite una biblioteca propia.')
   }
 
   if (loading && !view) return <div className="page-card skeleton-card-v124">Cargando instalaciones…</div>
@@ -426,12 +308,6 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
 
       {activeGuide && (
         <section id="active-subfolder-v127" className="active-subfolder-v127">
-          {editing && activeGuide.synthetic && (
-            <div className="materialize-canonical-v127">
-              <div><strong>Contenido integrado</strong><span>Esta guía proviene del contenido de respaldo de la aplicación. Conviértala una vez para editarla, cargar archivos y administrarla como cualquier otra subcarpeta.</span></div>
-              <button type="button" onClick={() => materializeSyntheticGuide(activeGuide)}>Convertir en subcarpeta editable</button>
-            </div>
-          )}
           <InlineGuide key={activeGuide.id} guideSummary={activeGuide} brand={brand} family={family} priority onGuideChanged={handleGuideChanged} />
         </section>
       )}
