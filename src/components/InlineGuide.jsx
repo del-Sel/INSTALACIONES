@@ -4,7 +4,7 @@ import { useEdit } from '../context/EditContext.jsx'
 import { safeFileName } from '../lib/text.js'
 import { invalidateCatalogCache } from '../lib/catalogCache.js'
 import { assetContextGroup, assetDisplayLabel, assetIcon, assetLabel, detectedAssetDescription, detectedAssetPreview, detectedAssetType, formatBytes, isBrowserImage, isBrowserVideo } from '../lib/library.js'
-import { isObviousInstallationSection, visibleGuideAssets } from '../lib/guide.js'
+import { installationFocus, isObviousInstallationSection, visibleGuideAssets } from '../lib/guide.js'
 import AppIcon from '../components/AppIcon.jsx'
 import VehiclePlaceholder from '../components/VehiclePlaceholder.jsx'
 import fulmarLogo from '../assets/fulmar-logo.jpg'
@@ -365,6 +365,16 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
   const visibleSections = useMemo(() => sections.filter(section => editing || ((!isObviousInstallationSection(section) || section.linkedAssets?.length || section.images?.length) && ((section.content || '').trim() || section.linkedAssets?.length || section.images?.length))), [sections, editing])
   const hiddenSections = useMemo(() => sections.filter(section => !editing && isObviousInstallationSection(section) && !section.linkedAssets?.length && !section.images?.length && (section.content || '').trim()), [sections, editing])
   const mainSections = visibleSections
+  const focusGroups = useMemo(() => {
+    const groups = new Map()
+    for (const section of visibleSections) {
+      const focus = installationFocus(section)
+      if (!focus) continue
+      if (!groups.has(focus.key)) groups.set(focus.key, { ...focus, sections: [] })
+      groups.get(focus.key).sections.push(section)
+    }
+    return [...groups.values()].sort((a, b) => a.order - b.order)
+  }, [visibleSections])
   const contentKind = guide?.content_kind || 'INSTRUCTIVO'
   const isReference = contentKind === 'REFERENCIA'
   const isPartial = contentKind === 'PARCIAL'
@@ -1410,6 +1420,30 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
               <strong>Instalación parcial</strong>
               <p>Se dispone de información documentada para parte de la instalación. Los apartados visibles corresponden únicamente al material registrado para este caso.</p>
             </div>
+          )}
+
+          {!editing && focusGroups.length > 0 && (
+            <section className="installation-focus-v1274" aria-label="Datos esenciales para la instalación">
+              <div className="installation-focus-head-v1274">
+                <div><span>CONSULTA RÁPIDA</span><h2>Datos esenciales para instalar</h2><p>Acceso directo a cableado, ubicación y pines documentados.</p></div>
+              </div>
+              <div className="installation-focus-grid-v1274">
+                {focusGroups.map(group => (
+                  <div key={group.key} className="installation-focus-group-v1274">
+                    <strong>{group.label}</strong>
+                    {group.sections.map(section => {
+                      const preview = paragraphs(section.content).join(' ').replace(/\s+/g, ' ').trim()
+                      return (
+                        <a key={section.id} href={`#section-${section.id}`} className="installation-focus-card-v1274">
+                          <span>{section.title || 'Apartado'}</span>
+                          {preview && <small>{preview.length > 180 ? `${preview.slice(0, 180)}…` : preview}</small>}
+                        </a>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           {mainSections.length > 0 ? mainSections.map(renderSection) : !isReference ? (

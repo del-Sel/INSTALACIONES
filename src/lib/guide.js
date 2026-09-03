@@ -9,6 +9,14 @@ function normalizedTitle(value) {
     .trim()
 }
 
+export function installationFocus(section = {}) {
+  const title = normalizedTitle(section.title)
+  if (/pin|pinout|terminal|vias/.test(title)) return { key: 'pins', label: 'Pines y terminales', order: 3 }
+  if (/ubic|tablero|fusilera|plafon|parante|acceso|toma/.test(title)) return { key: 'location', label: 'Ubicación y acceso', order: 2 }
+  if (/cable|cableado|empalm|conector|can|fms|obd|aliment|conex/.test(title)) return { key: 'connection', label: 'Cableado y conexión', order: 1 }
+  return null
+}
+
 export function isObviousInstallationSection(section = {}) {
   const title = normalizedTitle(section.title)
   return title === 'elementos necesarios para la instalacion'
