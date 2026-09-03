@@ -47,6 +47,7 @@ function Family() {
   const [newFolder, setNewFolder] = useState({ title: '', equipment: '', guide_type: 'MODELO', content_kind: 'INSTRUCTIVO' })
   const initialHash = String(window.location.hash || '').replace(/^#guide-/, '')
   const [activeGuideId, setActiveGuideId] = useState(initialHash || null)
+  const [showReferences, setShowReferences] = useState(false)
 
   async function loadView(force = false) {
     const snapshot = await loadCatalogSnapshot({ force })
@@ -83,16 +84,26 @@ function Family() {
   const references = useMemo(() => guides.filter(guide => guide.content_kind === 'REFERENCIA'), [guides])
   const validated = useMemo(() => instructionGuides.filter(guide => guide.status === 'VALIDADA').length, [instructionGuides])
   const allFolders = useMemo(() => [...instructionGuides, ...references], [instructionGuides, references])
+  const displayedFolders = useMemo(() => editing || showReferences ? allFolders : instructionGuides, [editing, showReferences, allFolders, instructionGuides])
 
   useEffect(() => {
-    if (!allFolders.length) { setActiveGuideId(null); return }
-    const hashId = String(window.location.hash || '').replace(/^#guide-/, '')
-    const desired = hashId && allFolders.some(item => String(item.id) === hashId) ? hashId : activeGuideId
-    if (desired && allFolders.some(item => String(item.id) === String(desired))) return
-    setActiveGuideId(String(allFolders[0].id))
-  }, [allFolders.length, brandSlug, familySlug])
+    setShowReferences(false)
+  }, [brandSlug, familySlug])
 
-  const activeGuide = allFolders.find(item => String(item.id) === String(activeGuideId)) || null
+  useEffect(() => {
+    const hashGuide = allFolders.find(item => String(item.id) === String(initialHash))
+    if (hashGuide?.content_kind === 'REFERENCIA') setShowReferences(true)
+  }, [allFolders, initialHash])
+
+  useEffect(() => {
+    if (!displayedFolders.length) { setActiveGuideId(null); return }
+    const hashId = String(window.location.hash || '').replace(/^#guide-/, '')
+    const desired = hashId && displayedFolders.some(item => String(item.id) === hashId) ? hashId : activeGuideId
+    if (desired && displayedFolders.some(item => String(item.id) === String(desired))) return
+    setActiveGuideId(String(displayedFolders[0].id))
+  }, [displayedFolders, brandSlug, familySlug, activeGuideId])
+
+  const activeGuide = displayedFolders.find(item => String(item.id) === String(activeGuideId)) || null
   const heroCover = useMemo(() => {
     for (const guide of instructionGuides.length ? instructionGuides : guides) {
       if (guide.cover_url) return guide.cover_url
@@ -156,20 +167,20 @@ function Family() {
     await loadView(true)
     setActiveGuideId(createdId)
     window.history.replaceState(null, '', `${window.location.pathname}#guide-${createdId}`)
-    setMessage('✓ Subcarpeta creada. Ya puede cargar su biblioteca y sus pasos.')
+    setMessage('✓ Instalación creada. Ya puede cargar su biblioteca y sus pasos.')
   }
 
   async function deleteSubfolder(guide) {
     if (!editing || !guide || deletingGuideId) return
-    const confirmed = window.confirm(
-      `¿Eliminar la subcarpeta “${guide.title}”?
-
-Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la biblioteca general se conservarán por seguridad.`
-    )
+    const confirmed = window.confirm([
+      `¿Eliminar la instalación “${guide.title}”?`,
+      '',
+      'Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la biblioteca general se conservarán por seguridad.',
+    ].join('\n'))
     if (!confirmed) return
 
     setDeletingGuideId(String(guide.id))
-    setMessage('Eliminando subcarpeta…')
+    setMessage('Eliminando instalación…')
 
     try {
       const sectionResult = await supabase.from('guide_sections').select('id').eq('guide_id', guide.id)
@@ -221,9 +232,9 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
       const nextGuide = remaining.find(item => String(item.id) !== deletedId) || null
       setActiveGuideId(nextGuide ? String(nextGuide.id) : null)
       window.history.replaceState(null, '', window.location.pathname + (nextGuide ? `#guide-${nextGuide.id}` : ''))
-      setMessage('✓ Subcarpeta eliminada. Los archivos de su biblioteca se conservaron si había material cargado.')
+      setMessage('✓ Instalación eliminada. Los archivos de su biblioteca se conservaron si había material cargado.')
     } catch (deleteError) {
-      setMessage(deleteError?.message || 'No se pudo eliminar la subcarpeta.')
+      setMessage(deleteError?.message || 'No se pudo eliminar la instalación.')
     } finally {
       setDeletingGuideId(null)
     }
@@ -250,9 +261,9 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
               ? <div className="structure-inline-actions-v127"><button type="button" onClick={saveFamilyName}>Guardar</button><button type="button" onClick={() => { setFamilyEditing(false); setFamilyName(family?.name || '') }}>Cancelar</button></div>
               : <button type="button" className="structure-pencil-v127" onClick={() => setFamilyEditing(true)} title="Editar nombre del modelo"><AppIcon name="edit" size={16} /></button>)}
           </div>
-          <p>Subcarpetas de instalación, variantes y documentación técnica disponibles para este modelo.</p>
+          <p>Consulte la instalación de este modelo y los registros técnicos asociados.</p>
           <div className="family-hero-stats-v9">
-            <div><strong>{allFolders.length}</strong><span>Subcarpetas</span></div>
+            <div><strong>{instructionGuides.length}</strong><span>Instalaciones</span></div>
             <div><strong>{validated}</strong><span>Validadas</span></div>
             <div><strong>{references.length}</strong><span>Referencias</span></div>
           </div>
@@ -262,22 +273,25 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
 
       <section className="subfolder-section-v127">
         <div className="section-heading-v9 structure-heading-v127">
-          <div><span>SUBCARPETAS</span><h2>Instalaciones y variantes</h2><p>Cada subcarpeta contiene su documentación específica y una biblioteca general de archivos.</p></div>
-          {editing && <button type="button" className="create-subfolder-v127" onClick={() => setCreateOpen(current => !current)}>+ Nueva subcarpeta</button>}
+          <div><span>INSTALACIONES DEL MODELO</span><h2>Procedimientos de instalación</h2><p>Consulte el procedimiento de montaje correspondiente. Las referencias técnicas adicionales se mantienen disponibles aparte.</p></div>
+          <div className="family-content-actions-v1273">
+            {references.length > 0 && <button type="button" className="reference-toggle-v1273" onClick={() => setShowReferences(current => !current)}>{showReferences ? 'Ocultar referencias' : `Mostrar referencias (${references.length})`}</button>}
+            {editing && <button type="button" className="create-subfolder-v127" onClick={() => setCreateOpen(current => !current)}>+ Nueva instalación</button>}
+          </div>
         </div>
 
         {editing && createOpen && (
           <form className="subfolder-create-panel-v127" onSubmit={createSubfolder}>
-            <label><span>Nombre de la subcarpeta</span><input value={newFolder.title} onChange={event => setNewFolder(current => ({ ...current, title: event.target.value }))} placeholder="Ej.: Daily Euro 6 · DG-600" autoFocus /></label>
+            <label><span>Nombre de la instalación</span><input value={newFolder.title} onChange={event => setNewFolder(current => ({ ...current, title: event.target.value }))} placeholder="Ej.: Daily Euro 6 · DG-600" autoFocus /></label>
             <label><span>Equipo</span><input value={newFolder.equipment} onChange={event => setNewFolder(current => ({ ...current, equipment: event.target.value }))} placeholder="Ej.: FMD-1000" /></label>
             <label><span>Tipo</span><select value={newFolder.guide_type} onChange={event => setNewFolder(current => ({ ...current, guide_type: event.target.value }))}><option value="MODELO">Instalación</option><option value="VARIANTE">Variante</option><option value="BASE">General</option></select></label>
             <label><span>Contenido</span><select value={newFolder.content_kind} onChange={event => setNewFolder(current => ({ ...current, content_kind: event.target.value }))}><option value="INSTRUCTIVO">Instructivo</option><option value="PARCIAL">Parcial</option><option value="REFERENCIA">Referencia</option></select></label>
-            <div><button type="button" onClick={() => setCreateOpen(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={creating || !newFolder.title.trim()}>{creating ? 'Creando…' : 'Crear subcarpeta'}</button></div>
+            <div><button type="button" onClick={() => setCreateOpen(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={creating || !newFolder.title.trim()}>{creating ? 'Creando…' : 'Crear instalación'}</button></div>
           </form>
         )}
 
         <div className="subfolder-grid-v127">
-          {allFolders.map((guide, index) => {
+          {displayedFolders.map((guide, index) => {
             const cover = guide.cover_url || collections[guide.library_collection_id]?.cover_url || ''
             const active = String(guide.id) === String(activeGuideId)
             return (
@@ -293,8 +307,8 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
                     className="subfolder-delete-v1272"
                     onClick={() => deleteSubfolder(guide)}
                     disabled={String(deletingGuideId) === String(guide.id)}
-                    title="Eliminar subcarpeta"
-                    aria-label={`Eliminar subcarpeta ${guide.title}`}
+                    title="Eliminar instalación"
+                    aria-label={`Eliminar instalación ${guide.title}`}
                   >
                     <AppIcon name="trash" size={15} />
                   </button>
@@ -302,7 +316,7 @@ Se eliminarán el instructivo, sus pasos y sus asociaciones. Los archivos de la 
               </div>
             )
           })}
-          {allFolders.length === 0 && <div className="page-card">{editing ? 'No hay subcarpetas todavía. Cree la primera con “Nueva subcarpeta”.' : 'No hay documentación registrada para este modelo.'}</div>}
+          {displayedFolders.length === 0 && <div className="page-card">{editing ? 'No hay instalaciones todavía. Cree la primera con “Nueva instalación”.' : references.length > 0 ? 'Este modelo no tiene una instalación documentada. Puede consultar sus referencias técnicas.' : 'No hay una instalación documentada para este modelo.'}</div>}
         </div>
       </section>
 

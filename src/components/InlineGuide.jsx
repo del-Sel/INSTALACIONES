@@ -4,7 +4,7 @@ import { useEdit } from '../context/EditContext.jsx'
 import { safeFileName } from '../lib/text.js'
 import { invalidateCatalogCache } from '../lib/catalogCache.js'
 import { assetContextGroup, assetDisplayLabel, assetIcon, assetLabel, detectedAssetDescription, detectedAssetPreview, detectedAssetType, formatBytes, isBrowserImage, isBrowserVideo } from '../lib/library.js'
-import { visibleGuideAssets } from '../lib/guide.js'
+import { isObviousInstallationSection, visibleGuideAssets } from '../lib/guide.js'
 import AppIcon from '../components/AppIcon.jsx'
 import VehiclePlaceholder from '../components/VehiclePlaceholder.jsx'
 import fulmarLogo from '../assets/fulmar-logo.jpg'
@@ -362,7 +362,8 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       })
   }, [assetPickerSection, assetPickerSearch, assetPickerType, assetPickerSourceAssets])
 
-  const visibleSections = useMemo(() => sections.filter(section => editing || (section.content || '').trim() || section.linkedAssets?.length || section.images?.length), [sections, editing])
+  const visibleSections = useMemo(() => sections.filter(section => editing || ((!isObviousInstallationSection(section) || section.linkedAssets?.length || section.images?.length) && ((section.content || '').trim() || section.linkedAssets?.length || section.images?.length))), [sections, editing])
+  const hiddenSections = useMemo(() => sections.filter(section => !editing && isObviousInstallationSection(section) && !section.linkedAssets?.length && !section.images?.length && (section.content || '').trim()), [sections, editing])
   const mainSections = visibleSections
   const contentKind = guide?.content_kind || 'INSTRUCTIVO'
   const isReference = contentKind === 'REFERENCIA'
@@ -1417,6 +1418,22 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
               <p>No se dispone actualmente de un procedimiento de instalación documentado para este caso.</p>
             </div>
           ) : null}
+
+          {!editing && hiddenSections.length > 0 && (
+            <details className="supplementary-sections-v1273">
+              <summary>Información complementaria <span>{hiddenSections.length} apartado{hiddenSections.length === 1 ? '' : 's'}</span></summary>
+              <div className="supplementary-sections-body-v1273">
+                {hiddenSections.map(section => (
+                  <article key={section.id} className="supplementary-section-v1273">
+                    <h3>{section.title || 'Información complementaria'}</h3>
+                    <div className="document-copy-v7">
+                      {paragraphs(section.content).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph.replace(/^[-•*]\s*/, '')}</p>)}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </details>
+          )}
 
           {editing && (
             <section className="add-section-panel-v7">

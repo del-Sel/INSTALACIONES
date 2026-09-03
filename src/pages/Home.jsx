@@ -175,7 +175,7 @@ function Home() {
             <div>
               <span className="section-label-v6">CATÁLOGO COMPLETO</span>
               <h2 id="home-documents-title">Documentación por modelo</h2>
-              <p>Todo el contenido está agrupado por marca y modelo. Los clientes y proyectos se conservan dentro de cada registro como contexto de trabajo.</p>
+              <p>Las instalaciones son el contenido principal. Las pruebas y referencias se conservan dentro de cada modelo como contexto técnico.</p>
             </div>
             <span className="home-section-count-v13">{countLabel(modelItems.length, 'modelo', 'modelos')}</span>
           </div>
@@ -187,6 +187,8 @@ function Home() {
                 counts[kind] = (counts[kind] || 0) + 1
                 return counts
               }, {})
+              const installationCount = (kindCounts.INSTRUCTIVO || 0) + (kindCounts.PARCIAL || 0)
+              const referenceCount = kindCounts.REFERENCIA || 0
               return (
                 <Link key={family.id} to={`/${brand.slug}/${family.slug}`} className="home-document-card-v13">
                   <div className="home-document-cover-v13">
@@ -195,11 +197,11 @@ function Home() {
                   <div className="home-document-copy-v13">
                     <span className="home-document-path-v13">{brand.name}</span>
                     <h3>{family.name}</h3>
-                    <p>{countLabel(familyGuides.length, 'documento', 'documentos')} · {countLabel(familyCollections.length, 'biblioteca', 'bibliotecas')} · {countLabel(fileCount, 'archivo', 'archivos')}</p>
+                    <p>{countLabel(installationCount, 'instalación', 'instalaciones')} · {countLabel(familyCollections.length, 'biblioteca', 'bibliotecas')} · {countLabel(fileCount, 'archivo', 'archivos')}</p>
                     <div className="home-document-meta-v13">
                       {kindCounts.INSTRUCTIVO > 0 && <span className="content-kind-mini-v8 instructivo">{kindCounts.INSTRUCTIVO} instructivos</span>}
                       {kindCounts.PARCIAL > 0 && <span className="content-kind-mini-v8 parcial">{kindCounts.PARCIAL} parciales</span>}
-                      {kindCounts.REFERENCIA > 0 && <span className="content-kind-mini-v8 referencia">{kindCounts.REFERENCIA} referencias</span>}
+                      {referenceCount > 0 && <span className="content-kind-mini-v8 referencia">{referenceCount} referencias</span>}
                     </div>
                     <small>{familyGuides.length > 0 ? `Última actualización: ${formatUpdatedDate(familyGuides.map(guide => guide.updated_at).filter(Boolean).sort().slice(-1)[0])}` : 'Material técnico disponible'}</small>
                   </div>
