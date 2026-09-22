@@ -50,6 +50,19 @@ const DEFAULT_META_LABELS = {
   customFields: [],
 }
 
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_UPLOAD_LABEL = '10 MB'
+
+function isImageFile(file) {
+  const mime = String(file?.type || '').toLowerCase()
+  const name = String(file?.name || '').toLowerCase()
+  return mime.startsWith('image/') || /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i.test(name)
+}
+
+function isOversizedImage(file) {
+  return isImageFile(file) && Number(file?.size || 0) > MAX_IMAGE_UPLOAD_BYTES
+}
+
 function normalizeMetaLabels(parsed = {}) {
   const source = parsed && typeof parsed === 'object' ? parsed : {}
   const customFields = Array.isArray(source.customFields)
@@ -695,10 +708,17 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   async function uploadManualImages(section, fileList) {
     if (!editing) return
-    const files = Array.from(fileList || [])
+    const selectedFiles = Array.from(fileList || [])
+    const oversized = selectedFiles.filter(isOversizedImage)
+    const files = selectedFiles.filter(file => !isOversizedImage(file))
+    if (oversized.length && !files.length) {
+      setMessage(`No se subieron las imágenes: el máximo es ${MAX_IMAGE_UPLOAD_LABEL} por imagen.`)
+      return
+    }
     if (!files.length) return
 
-    setMessage(`Subiendo ${files.length} imagen${files.length === 1 ? '' : 'es'}…`)
+    const sizeNote = oversized.length ? ` · ${oversized.length} omitida${oversized.length === 1 ? '' : 's'} por superar ${MAX_IMAGE_UPLOAD_LABEL}` : ''
+    setMessage(`Subiendo ${files.length} imagen${files.length === 1 ? '' : 'es'}…${sizeNote}`)
     const baseOrder = (section.images || []).length
 
     const results = await Promise.allSettled(files.map(async (file, index) => {
@@ -733,9 +753,9 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
     }
 
     if (failed) {
-      setMessage(`${added.length ? `✓ ${added.length} subida${added.length === 1 ? '' : 's'} · ` : ''}${failed} imagen${failed === 1 ? '' : 'es'} no se pudieron subir`)
+      setMessage(`${added.length ? `✓ ${added.length} subida${added.length === 1 ? '' : 's'} · ` : ''}${failed} imagen${failed === 1 ? '' : 'es'} no se pudieron subir${sizeNote}`)
     } else {
-      setMessage(`✓ ${added.length} imagen${added.length === 1 ? '' : 'es'} agregada${added.length === 1 ? '' : 's'} · sin recargar`)
+      setMessage(`✓ ${added.length} imagen${added.length === 1 ? '' : 'es'} agregada${added.length === 1 ? '' : 's'} · sin recargar${sizeNote}`)
     }
   }
 
@@ -831,9 +851,16 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   async function uploadGeneralLibraryFiles(fileList) {
     if (!editing || !guide) return
-    const files = Array.from(fileList || []).filter(Boolean)
+    const selectedFiles = Array.from(fileList || []).filter(Boolean)
+    const oversized = selectedFiles.filter(isOversizedImage)
+    const files = selectedFiles.filter(file => !isOversizedImage(file))
+    if (oversized.length && !files.length) {
+      setMessage(`No se subieron las imágenes: el máximo es ${MAX_IMAGE_UPLOAD_LABEL} por imagen.`)
+      return
+    }
     if (!files.length) return
-    setMessage(`Preparando biblioteca general · ${files.length} archivo${files.length === 1 ? '' : 's'}…`)
+    const sizeNote = oversized.length ? ` · ${oversized.length} imagen${oversized.length === 1 ? '' : 'es'} omitida${oversized.length === 1 ? '' : 's'} por superar ${MAX_IMAGE_UPLOAD_LABEL}` : ''
+    setMessage(`Preparando biblioteca general · ${files.length} archivo${files.length === 1 ? '' : 's'}…${sizeNote}`)
 
     try {
       const targetCollection = await ensureGeneralLibrary()
@@ -879,7 +906,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
       setAssets(nextAssets)
       await refreshLibraryStats(targetCollection.id, nextAssets)
       invalidateCatalogCache()
-      setMessage(`✓ ${uploaded.length} archivo${uploaded.length === 1 ? '' : 's'} agregado${uploaded.length === 1 ? '' : 's'} a la biblioteca general`)
+      setMessage(`✓ ${uploaded.length} archivo${uploaded.length === 1 ? '' : 's'} agregado${uploaded.length === 1 ? '' : 's'} a la biblioteca general${sizeNote}`)
     } catch (uploadError) {
       console.error(uploadError)
       setMessage(uploadError?.message || 'No se pudieron subir los archivos a la biblioteca general.')
@@ -1126,6 +1153,10 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
 
   async function uploadCover(file) {
     if (!editing || !guide || !file) return
+    if (isOversizedImage(file)) {
+      setMessage(`No se subió la portada: el máximo es ${MAX_IMAGE_UPLOAD_LABEL} por imagen.`)
+      return
+    }
     const storagePath = `covers/${guide.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`
     const upload = await supabase.storage.from('guide-images').upload(storagePath, file, { cacheControl: '31536000', upsert: false })
     if (upload.error) {
@@ -1281,7 +1312,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
           {editing && (
             <label className="inline-upload-v7">
               <AppIcon name="photo" size={18} />
-              <span><strong>Agregar imágenes</strong><small>Se insertan dentro de esta sección.</small></span>
+              <span><strong>Agregar imágenes</strong><small>Se insertan dentro de esta sección. Máximo {MAX_IMAGE_UPLOAD_LABEL} por imagen.</small></span>
               <input type="file" accept="image/*" multiple onChange={event => { uploadManualImages(section, event.target.files); event.target.value = '' }} />
             </label>
           )}
@@ -1486,7 +1517,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
                   <div className="general-library-editor-v127">
                     <div>
                       <strong>Biblioteca general de esta subcarpeta</strong>
-                      <span>Cargue fotos, PDF, Word, Excel, videos o archivos técnicos. Después podrá seleccionarlos desde cualquier fase con “Ver fotos y archivos”.</span>
+                      <span>Cargue fotos, PDF, Word, Excel, videos o archivos técnicos. Las imágenes tienen un máximo de {MAX_IMAGE_UPLOAD_LABEL} por archivo. Después podrá seleccionarlos desde cualquier fase con “Ver fotos y archivos”.</span>
                     </div>
                     <label className="general-library-upload-v127">
                       <AppIcon name="upload" size={18} /> Subir archivos
@@ -1661,7 +1692,7 @@ function InlineGuide({ guideSummary, brand, family, priority = false, onGuideCha
         <div className="cover-picker-backdrop-v7" onClick={() => setCoverPicker(false)}>
           <div className="cover-picker-v7" onClick={event => event.stopPropagation()}>
             <div className="cover-picker-head-v7">
-              <div><strong>Portada de la instalación</strong><span>Seleccione una imagen representativa del vehículo o cargue una nueva.</span></div>
+              <div><strong>Portada de la instalación</strong><span>Seleccione una imagen representativa del vehículo o cargue una nueva. Máximo {MAX_IMAGE_UPLOAD_LABEL}.</span></div>
               <button type="button" onClick={() => setCoverPicker(false)}><AppIcon name="close" size={20} /></button>
             </div>
 
